@@ -35,6 +35,5 @@ const artifact = `<title>Lory's Lab</title>
 ${inlined}
 `;
 writeFileSync('dist/artifact.html', artifact);
-writeFileSync('dist/lorys-lab-game.html', artifact); // old artifact path (kept for safety)
-writeFileSync('dist/lorys-lab-play.html', artifact); // current published artifact path
+writeFileSync('dist/lorys-lab-v2.html', artifact); // current published artifact path
 console.log('dist/artifact.html:', (artifact.length / 1024).toFixed(0), 'KB');
