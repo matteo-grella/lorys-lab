@@ -242,9 +242,14 @@ function run(level, placements, seconds = 12, watch = null) {
   };
   const hold = Core.simulate(level, [], { maxSeconds: 8 });
   check('rope ties nearby berry and holds it (no win, settles)', !hold.won && hold.settled);
-  const cut = Core.simulate(level, [{ type: 'scissors', x: 500, y: 280 }], { maxSeconds: 10, collectEvents: true });
-  check('scissors cut the rope -> berry falls into bowl',
-    cut.won && cut.events.some(e => e.type === 'snip'), `t=${cut.seconds}s`);
+  const idle = Core.simulate(level, [{ type: 'scissors', x: 500, y: 280 }], { maxSeconds: 8 });
+  check('untriggered scissors do NOT cut the rope', !idle.won && idle.settled);
+  const cut = Core.simulate(level, [
+    { type: 'scissors', x: 500, y: 280 },
+    { type: 'ball_marble', x: 455, y: 140 },  // falls onto the blades: snap!
+  ], { maxSeconds: 10, collectEvents: true });
+  check('touched scissors snap and cut the rope -> berry falls into bowl',
+    cut.won && cut.events.some(e => e.type === 'snip') && cut.events.some(e => e.type === 'snipclick'), `t=${cut.seconds}s`);
 }
 
 // 17. Candle lights a fuse; the burning front pops a goal balloon later
@@ -391,10 +396,13 @@ function run(level, placements, seconds = 12, watch = null) {
       { type: 'spikes', x: 500, y: 300, angle: 180 },
     ],
   };
-  const uncut = Core.simulate(level, [], { maxSeconds: 8 });
-  check('tethered goal balloon bobs in place (no win)', !uncut.won && uncut.settled);
-  const r = Core.simulate(level, [{ type: 'scissors', x: 500, y: 560 }], { maxSeconds: 14, collectEvents: true });
-  check('scissors snip the balloon string -> freed balloon rises into cactus',
+  const uncut = Core.simulate(level, [{ type: 'scissors', x: 520, y: 570 }], { maxSeconds: 8 });
+  check('tethered goal balloon bobs in place (idle scissors, no win)', !uncut.won && uncut.settled);
+  const r = Core.simulate(level, [
+    { type: 'scissors', x: 520, y: 570 },
+    { type: 'ball_marble', x: 550, y: 430 },  // skims past the balloon, taps the blades
+  ], { maxSeconds: 14, collectEvents: true });
+  check('triggered scissors snip the balloon string -> balloon rises into cactus',
     r.won && r.events.some(e => e.type === 'snip'), `t=${r.seconds}s`);
 }
 
@@ -416,6 +424,22 @@ function run(level, placements, seconds = 12, watch = null) {
   const r = Core.simulate(level, [{ type: 'ball_marble', x: 300, y: 520 }], { maxSeconds: 10, collectEvents: true });
   check('weight on switch -> hydrant sprays -> berry pushed into bowl',
     r.won && r.events.some(e => e.type === 'water_on'), `t=${r.seconds}s`);
+}
+
+// 26. Fist rotated 90 degrees punches sideways along its facing.
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'fist', x: 400, y: 640, angle: 90 },   // glove points right
+      { type: 'plank', x: 300, y: 500, angle: 30 },  // marble slide into the glove
+      { type: 'ball_marble', x: 245, y: 460 },
+      { type: 'bell', x: 900, y: 640 },
+    ],
+  };
+  const r = Core.simulate(level, [], { maxSeconds: 10, collectEvents: true });
+  check('sideways fist punches marble horizontally into a far bell',
+    r.won && r.events.some(e => e.type === 'thwack'), `t=${r.seconds}s`);
 }
 
 const fails = results.filter(r => !r.pass);

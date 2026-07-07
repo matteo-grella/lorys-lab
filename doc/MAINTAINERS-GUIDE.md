@@ -192,12 +192,12 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `ball_beach` | r 28 | dynamic | ✓ | – | – | light + bouncy |
 | `ball_marble` | r 18 | dynamic | ✓ | – | – | heavy; the only magnet-attractable body |
 | `rope` | 28×18 anchor | ✓ | ✓ (sandbox) | – | – | tether hangs 150px below; grabs nearest dynamic body within 70px of its end at sim start; cut by scissors/flame |
-| `scissors` | 74×40 | ✓ | ✓ (sandbox) | ✓ | – | cuts any rope OR goal-balloon tether string crossing its OBB (flames burn both too); a cut goal balloon floats free upward |
+| `scissors` | 74×40 | ✓ | ✓ (sandbox) | ✓ | – | TRIGGERED: any touch snaps the blades once (12-frame cutting window, 45-frame re-arm; events `snipclick`/`snip`); during the window they cut any rope or goal-balloon tether crossing their OBB (flames burn both too); a cut balloon floats free |
 | `candle` | 26×58 | ✓ | ✓ (sandbox) | – | – | lit by default; flame tip ignites fuses, pops balloons, burns ropes; doused by water; relightable |
 | `fuse` | 130×12 | ✓ sensor | ✓ (sandbox) | ✓ | – | bodies pass through; burns as interval [a,b] from ignition point both ways in ~2.5s (`FUSE_BURN_FRAMES 150`); fronts are flame points |
 | `hydrant` | 52×62 | ✓ | ✓ (sandbox) | – | right/left/up | sleepy like the magnet: a bump (relSpeed ≥ 1.6) opens the valve for `HYDRANT_ACTIVE_FRAMES 180` (~3s), or a wired switch drives it; while active the jet (reach 240, half-width 46) pushes EVERYTHING incl. berries (marbles reduced) and extinguishes flames. Events `water_on/water_off` drive the audio loop |
 | `switch` | 84×20 | ✓ | ✓ (sandbox) | – | – | pressure plate; wires to nearest fan/conveyor/magnet/hydrant within 260px at sim start; device runs only while pressed (magnet: switch replaces bump/timer) |
-| `fist` | 66×46 | ✓ | ✓ (sandbox) | – | – | punches a body landing on top straight up at 15 px/f (`FIST_LAUNCH`), 60-frame cooldown |
+| `fist` | 66×46 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360°: punches a body touching its GLOVE side (local −y) along its facing at 15 px/f (`FIST_LAUNCH`, tangential velocity preserved), 60-frame cooldown |
 | `shelf` | w×24 (default 200) | ✓ | fixed-only | ✓ | – | `sizable` (levels set w/h/angle) |
 | `wall` | 24×200 | ✓ | fixed-only | – | – | `sizable` |
 | `berry` | r 16 | dynamic | fixed-only* | – | – | THE goal ball; `isBerry` flag |

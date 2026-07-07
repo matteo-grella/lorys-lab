@@ -558,6 +558,7 @@
         case 'magnet_on': sfx('magnetClunk'); startLoop('magnet'); break;
         case 'magnet_off': stopLoop('magnet'); sfx('magnetWind'); break;
         case 'snip': sfx('snip'); break;
+        case 'snipclick': sfx('rotate'); break; // blade snap without a cut
         case 'thwack': sfx('thwack'); break;
         case 'switch_on': sfx('switchOn'); break;
         case 'switch_off': sfx('switchOff'); break;

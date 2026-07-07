@@ -115,6 +115,20 @@
     c.fillStyle = C.shadow; c.fillRect(0, FLOOR_Y, viewW, 6);
     c.strokeStyle = 'rgba(143,98,56,0.15)'; c.lineWidth = 1.5;
     for (let x = 48; x < viewW; x += 96) { c.beginPath(); c.moveTo(x, FLOOR_Y + 6); c.lineTo(x, BOARD_H); c.stroke(); }
+    // makers' mark, carved faintly into the wall above the skirting
+    try {
+      const mark = atob('TWF0dGVvIEcuICYgTG9yZW56byBHLg==');
+      c.save();
+      c.translate(viewW - 190, skirtY - 14);
+      c.rotate(-0.012);
+      c.font = 'italic 600 15px ui-rounded, Georgia, serif';
+      c.textAlign = 'right';
+      c.fillStyle = 'rgba(143,98,56,0.16)';
+      c.fillText(mark, 0, 0);
+      c.fillStyle = 'rgba(255,249,238,0.10)';
+      c.fillText(mark, 0.7, 0.7); // faint emboss lip: reads as carved wood
+      c.restore();
+    } catch (e) {}
     // when the room is wider than the board, mark the bench ends with subtle
     // wooden posts so the invisible physics walls read as intentional
     if (viewW > BOARD_W + 4) {
@@ -981,6 +995,7 @@
           else { fx.stars(e.x, e.y, 4); fx.ring(e.x, e.y, C.paper); }
           markSnip(e, sim);
           break;
+        case 'snipclick': markSnip(e, sim); break;
         case 'ignite':
           for (let i = 0; i < 7; i++) spawn({ kind: 'flamep', x: e.x, y: e.y, vx: (Math.random() - 0.5) * 3, vy: -1 - Math.random() * 2.5, life: 0.5, t: 0, r: 3.2 });
           break;

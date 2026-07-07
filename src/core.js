@@ -35,7 +35,7 @@
     fuse:        { w: 130, h: 12,  static: true,  placeable: true, rot: true },
     hydrant:     { w: 52,  h: 62,  static: true,  placeable: true, dir: ['right', 'left', 'up'] },
     switch:      { w: 84,  h: 20,  static: true,  placeable: true },
-    fist:        { w: 66,  h: 46,  static: true,  placeable: true },
+    fist:        { w: 66,  h: 46,  static: true,  placeable: true, rot: true },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -181,8 +181,10 @@
         break;
 
       case 'scissors':
+        // Triggered like the other sleepy machines: anything touching them
+        // makes the blades snap once (a short cutting window), then re-arm.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.1 }),
-          { snips: 0 }));
+          { snips: 0, scis: { snip: 0, cooldown: 0 } }));
         break;
 
       case 'candle':
@@ -209,7 +211,9 @@
         break;
 
       case 'fist':
-        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.1 }),
+        // Rotatable 360°: punches along its local "up", i.e. wherever the
+        // glove points after rotation.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.4, restitution: 0.1 }),
           { fist: { cooldown: 0 } }));
         break;
 
@@ -474,14 +478,33 @@
           }
         }
 
-        // Spring-loaded fist: punches whatever lands on it straight up.
+        // Scissors trigger: any touch makes the blades snap once (the actual
+        // cutting happens during the short snip window in applyBehaviours).
+        for (const [sb, o] of [[a, b], [b, a]]) {
+          const sc = lab(sb).scis;
+          if (sc && !o.isStatic && !o.isSensor && sc.cooldown <= 0 && sc.snip <= 0) {
+            sc.snip = 12;                      // ~0.2s cutting window
+            sc.cooldown = 45;
+            state.events.push({ type: 'snipclick', x: sb.position.x, y: sb.position.y });
+          }
+        }
+
+        // Spring-loaded fist: punches whatever lands on its glove side, along
+        // the direction the glove points (local -y rotated by the body angle).
         for (const [fb, o] of [[a, b], [b, a]]) {
           const fm = lab(fb).fist;
-          if (fm && !o.isStatic && !o.isSensor && fm.cooldown <= 0
-            && o.position.y < fb.position.y - 6 && relSpeed >= 1) {
+          if (fm && !o.isStatic && !o.isSensor && fm.cooldown <= 0 && relSpeed >= 1) {
+            const l = toLocal(fb, o.position);
+            if (l.y >= -6) continue;           // touched the base, not the glove
             fm.cooldown = FIST_COOLDOWN;
-            Body.setVelocity(o, { x: o.velocity.x, y: -FIST_LAUNCH });
-            state.events.push({ type: 'thwack', x: fb.position.x, y: fb.position.y - 24, bodyId: o.id, partId: lab(fb).id });
+            const nx = Math.sin(fb.angle), ny = -Math.cos(fb.angle);
+            // project out the incoming normal component, add the punch
+            const vn = o.velocity.x * nx + o.velocity.y * ny;
+            Body.setVelocity(o, {
+              x: o.velocity.x - vn * nx + nx * FIST_LAUNCH,
+              y: o.velocity.y - vn * ny + ny * FIST_LAUNCH,
+            });
+            state.events.push({ type: 'thwack', x: fb.position.x + nx * 24, y: fb.position.y + ny * 24, bodyId: o.id, partId: lab(fb).id });
           }
         }
 
@@ -793,10 +816,14 @@
         }
       }
 
-      // Scissors cut any rope — or balloon string — crossing their blades.
+      // Scissors: tick trigger timers; blades only cut during the snip window
+      // right after something touches them.
       for (const p of parts) {
         if (p.spec.type !== 'scissors') continue;
         const sb = p.bodies[0], sm = lab(sb);
+        if (sm.scis.cooldown > 0) sm.scis.cooldown--;
+        if (sm.scis.snip <= 0) continue;
+        sm.scis.snip--;
         for (const q of parts) {
           if (q.spec.type === 'rope') {
             const ends = ropeEnds(q);
