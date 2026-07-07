@@ -1,6 +1,6 @@
 // Lory's Lab service worker: cache-first so the game works fully offline.
 // Bump the version to invalidate after each deploy.
-const CACHE = 'lorys-lab-v2';
+const CACHE = 'lorys-lab-v3';
 const ASSETS = [
   '.', 'index.html', 'manifest.json', 'icon-180.png', 'icon-512.png',
   'vendor/matter.min.js', 'src/core.js', 'src/levels.js', 'src/audio.js',

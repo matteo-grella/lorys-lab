@@ -271,13 +271,11 @@
         <button class="big blue" id="sandboxBtn">🎨&ensp;Sandbox</button>
         <div class="mode-row">
           <span>Who's inventing?</span>
-          <button class="mode ${mode === 'sprout' ? 'on' : ''}" data-m="sprout">🌱 Little inventor <small>age 5+</small></button>
-          <button class="mode ${mode === 'whiz' ? 'on' : ''}" data-m="whiz">🚀 Big inventor <small>age 8+</small></button>
+          <button class="mode ${mode === 'sprout' ? 'on' : ''}" data-m="sprout">🌱 Little inventor <small>age 5+ · endless hints</small></button>
+          <button class="mode ${mode === 'whiz' ? 'on' : ''}" data-m="whiz">🚀 Big inventor <small>age 8+ · 2 hints a level</small></button>
         </div>
         <div class="title-toggles">
-          <button class="chip btn" id="tSfx" title="Sound"></button>
           <button class="chip btn" id="tMusic" title="Music"></button>
-          <button class="chip btn" id="tJuice" title="Speed sparkle effects"></button>
           <button class="chip btn reset" id="tReset" title="Erase all progress">🧹 Start fresh</button>
         </div>
       </div>`;
@@ -287,16 +285,11 @@
       save.mode = b.dataset.m; persist(); A.sfx('button'); showTitle();
     });
     const syncTitleToggles = () => {
-      $('#tSfx').textContent = save.sfx ? '🔊' : '🔇';
-      $('#tMusic').textContent = save.music ? '🎵' : '𝄽';
+      $('#tMusic').textContent = save.music ? '🎵 Music on' : '🎵 Music off';
       $('#tMusic').style.opacity = save.music ? 1 : 0.5;
-      $('#tJuice').textContent = '✨';
-      $('#tJuice').style.opacity = save.juice ? 1 : 0.4;
     };
     syncTitleToggles();
-    $('#tSfx').onclick = () => { save.sfx = !save.sfx; A.setSfx(save.sfx); persist(); syncTitleToggles(); syncAudioBtns(); A.sfx('button'); };
     $('#tMusic').onclick = () => { save.music = !save.music; A.setMusic(save.music); persist(); syncTitleToggles(); syncAudioBtns(); };
-    $('#tJuice').onclick = () => { save.juice = !save.juice; R.setJuice(save.juice); persist(); syncTitleToggles(); syncAudioBtns(); A.sfx('button'); };
     $('#tReset').onclick = () => { A.sfx('button'); showResetConfirm(); };
   }
 

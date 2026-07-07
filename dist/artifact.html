@@ -70,7 +70,8 @@
   .mode small { display: block; font-weight: 600; color: #8C7A6B; }
   .mode.on { border-color: var(--blue); background: #EAF2FF; }
   .title-toggles { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
-  .title-toggles .chip.btn.reset { font-size: 15px; font-weight: 800; color: var(--poppy); }
+  .title-toggles .chip.btn { font-size: 16px; font-weight: 800; }
+  .title-toggles .chip.btn.reset { font-size: 15px; color: var(--poppy); }
   .big.danger { background: var(--poppy); box-shadow: 0 5px 0 #B93A28; }
   .reset-warn { font-size: 17px; font-weight: 600; color: var(--ink); margin: 4px 0 18px; line-height: 1.4; }
 
@@ -4488,13 +4489,11 @@
         <button class="big blue" id="sandboxBtn">🎨&ensp;Sandbox</button>
         <div class="mode-row">
           <span>Who's inventing?</span>
-          <button class="mode ${mode === 'sprout' ? 'on' : ''}" data-m="sprout">🌱 Little inventor <small>age 5+</small></button>
-          <button class="mode ${mode === 'whiz' ? 'on' : ''}" data-m="whiz">🚀 Big inventor <small>age 8+</small></button>
+          <button class="mode ${mode === 'sprout' ? 'on' : ''}" data-m="sprout">🌱 Little inventor <small>age 5+ · endless hints</small></button>
+          <button class="mode ${mode === 'whiz' ? 'on' : ''}" data-m="whiz">🚀 Big inventor <small>age 8+ · 2 hints a level</small></button>
         </div>
         <div class="title-toggles">
-          <button class="chip btn" id="tSfx" title="Sound"></button>
           <button class="chip btn" id="tMusic" title="Music"></button>
-          <button class="chip btn" id="tJuice" title="Speed sparkle effects"></button>
           <button class="chip btn reset" id="tReset" title="Erase all progress">🧹 Start fresh</button>
         </div>
       </div>`;
@@ -4504,16 +4503,11 @@
       save.mode = b.dataset.m; persist(); A.sfx('button'); showTitle();
     });
     const syncTitleToggles = () => {
-      $('#tSfx').textContent = save.sfx ? '🔊' : '🔇';
-      $('#tMusic').textContent = save.music ? '🎵' : '𝄽';
+      $('#tMusic').textContent = save.music ? '🎵 Music on' : '🎵 Music off';
       $('#tMusic').style.opacity = save.music ? 1 : 0.5;
-      $('#tJuice').textContent = '✨';
-      $('#tJuice').style.opacity = save.juice ? 1 : 0.4;
     };
     syncTitleToggles();
-    $('#tSfx').onclick = () => { save.sfx = !save.sfx; A.setSfx(save.sfx); persist(); syncTitleToggles(); syncAudioBtns(); A.sfx('button'); };
     $('#tMusic').onclick = () => { save.music = !save.music; A.setMusic(save.music); persist(); syncTitleToggles(); syncAudioBtns(); };
-    $('#tJuice').onclick = () => { save.juice = !save.juice; R.setJuice(save.juice); persist(); syncTitleToggles(); syncAudioBtns(); A.sfx('button'); };
     $('#tReset').onclick = () => { A.sfx('button'); showResetConfirm(); };
   }
 
