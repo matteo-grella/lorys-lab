@@ -9,8 +9,10 @@ const scripts = ['vendor/matter.min.js', 'src/core.js', 'src/levels.js', 'src/au
 
 const inlined = scripts.map(p => `<script>\n/* ==== ${p} ==== */\n${readFileSync(p, 'utf8')}\n</script>`).join('\n');
 
-// standalone
+// standalone — strip PWA link tags (manifest/icons live on the hosted site,
+// not next to the single file; leaving them logs 404s on file://)
 let standalone = html.replace(/^\s*<script src="[^"]+"><\/script>\s*$/gm, '');
+standalone = standalone.replace(/^\s*<link rel="(manifest|apple-touch-icon|icon)"[^>]*>\s*$/gm, '');
 standalone = standalone.replace('</body>', inlined + '\n</body>');
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/lorys-lab.html', standalone);

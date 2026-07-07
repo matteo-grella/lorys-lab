@@ -1134,6 +1134,13 @@
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, BOARD_W, BOARD_H + TRAY_H);
+
+    // camera: everything on the BOARD is drawn under this transform; the
+    // tray (after restore) stays fixed. Pure view — physics is untouched.
+    const cam = frame.cam || { z: 1, x: 0, y: 0 };
+    ctx.save();
+    ctx.translate(cam.x, cam.y);
+    ctx.scale(cam.z, cam.z);
     ctx.drawImage(bgCache, 0, 0, BOARD_W, BOARD_H + TRAY_H);
 
     const o = { t, running };
@@ -1170,6 +1177,8 @@
     if (dragGhost) drawGhost(ctx, dragGhost, o, { invalid: dragGhost.invalid, lift: true });
 
     drawParticles(ctx);
+
+    ctx.restore(); // end camera — tray below is fixed to the screen
 
     // tray
     let wells = null;

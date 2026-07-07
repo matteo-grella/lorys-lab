@@ -8,9 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lory's Lab">
 <meta name="theme-color" content="#FBF1DE">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-180.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+
+
+
 <title>Lory's Lab</title>
 <style>
   :root {
@@ -4211,6 +4211,13 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, BOARD_W, BOARD_H + TRAY_H);
+
+    // camera: everything on the BOARD is drawn under this transform; the
+    // tray (after restore) stays fixed. Pure view — physics is untouched.
+    const cam = frame.cam || { z: 1, x: 0, y: 0 };
+    ctx.save();
+    ctx.translate(cam.x, cam.y);
+    ctx.scale(cam.z, cam.z);
     ctx.drawImage(bgCache, 0, 0, BOARD_W, BOARD_H + TRAY_H);
 
     const o = { t, running };
@@ -4247,6 +4254,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     if (dragGhost) drawGhost(ctx, dragGhost, o, { invalid: dragGhost.invalid, lift: true });
 
     drawParticles(ctx);
+
+    ctx.restore(); // end camera — tray below is fixed to the screen
 
     // tray
     let wells = null;
@@ -4399,6 +4408,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
   function enterLevel(i, sandbox, puzzle) {
     stopRun();                                   // covers Skip-during-run etc.
+    resetCam();
     const skip = $('#skipBtn'); if (skip) skip.remove();
     S.sandbox = !!sandbox;
     S.puzzle = puzzle || null;
@@ -4754,11 +4764,13 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     if (spec.y > R.FLOOR_Y - halfH + 4 || spec.y < 40 || spec.x < 30 || spec.x > APP_W - 30) return true;
     // keep the zone under the floating Play button drop-free: a part there
     // would sit underneath the DOM button and become ungrabbable. The button
-    // grows with uiBoost on phones, so the zone does too (no stored solution
-    // uses this corner — checked against all 24 levels).
+    // grows with uiBoost on phones (no stored solution uses this corner —
+    // checked against all 24 levels). The button lives in CANVAS space, so
+    // map its rect into board space through the camera.
     const half = Math.max(halfW, halfH);
-    const bw = 92 * uiBoost + 40;
-    if (spec.x + half > APP_W - bw && spec.y + half > R.BOARD_H - 130 - 92 * uiBoost) return true;
+    const zoneX = (APP_W - (92 * uiBoost + 40) - cam.x) / cam.z;
+    const zoneY = (APP_H - 128 - 92 * uiBoost - 18 - cam.y) / cam.z;
+    if (spec.x + half > zoneX && spec.y + half > zoneY) return true;
     // test against a sim WITHOUT the dragged part (S.sim is rebuilt at drag start)
     return Core.placementOverlaps(S.sim, spec);
   }
@@ -5051,6 +5063,26 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     return { x: (e.clientX - r.left) * (APP_W / r.width), y: (e.clientY - r.top) * ((R.BOARD_H + R.TRAY_H) / r.height) };
   }
 
+  // ---------------------------------------------------------------------------
+  // camera (Tier-2 mobile): a view transform over the BOARD only. Two fingers
+  // pinch-zoom (1..2.5x) and pan; the tray, top bar, and dialogs stay fixed.
+  // Pure presentation — physics and placements live in board coords as always.
+  // ---------------------------------------------------------------------------
+  const cam = { z: 1, x: 0, y: 0 };
+  function clampCam() {
+    cam.z = Math.min(2.5, Math.max(1, cam.z));
+    if (cam.z < 1.04) cam.z = 1; // snap: pinching out lands exactly on 1x
+    cam.x = Math.min(0, Math.max(APP_W * (1 - cam.z), cam.x));
+    cam.y = Math.min(0, Math.max(R.BOARD_H * (1 - cam.z), cam.y));
+    if (cam.z === 1) { cam.x = 0; cam.y = 0; }
+  }
+  function resetCam() { cam.z = 1; cam.x = 0; cam.y = 0; }
+  // canvas point -> board point (tray coords are canvas coords, unaffected)
+  function toBoard(pt) { return { x: (pt.x - cam.x) / cam.z, y: (pt.y - cam.y) / cam.z }; }
+
+  const activePtrs = new Map(); // pointerId -> last canvas pos
+  let pinch = null;             // {ids:[a,b], d0, mid0, cam0}
+
   function hitPlacement(pt) {
     // topmost (last) placement whose body contains the point (with padding)
     const bodies = S.sim.bodies().filter(b => b.plugin.lab && b.plugin.lab.placed && !b.isSensor);
@@ -5079,14 +5111,34 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     if (S.screen !== 'game') return;
     const pt = canvasPos(e);
     cv.setPointerCapture(e.pointerId);
+    activePtrs.set(e.pointerId, pt);
+
+    // two fingers on the board = pinch zoom/pan; works in every phase and
+    // takes over from a one-finger drag (which is safely refunded)
+    if (activePtrs.size === 2 && !pinch) {
+      const [a, b] = [...activePtrs.values()];
+      if (a.y < R.BOARD_H && b.y < R.BOARD_H) {
+        cancelDrag();
+        pinch = {
+          ids: [...activePtrs.keys()],
+          d0: Math.max(20, Math.hypot(a.x - b.x, a.y - b.y)),
+          mid0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+          cam0: { z: cam.z, x: cam.x, y: cam.y },
+        };
+        return;
+      }
+    }
+    if (pinch) return;
 
     if (S.phase === 'run' || S.phase === 'won') return;
     if (S.drag) return; // one drag at a time: a second finger must not steal it
 
+    const bpt = toBoard(pt);
+
     // puzzle-making: taps just toggle parts in/out of the future tray
     if (S.pluckMode) {
       if (pt.y > R.BOARD_H - 6) return;
-      const idx = hitPlacement(pt);
+      const idx = hitPlacement(bpt);
       if (idx >= 0) {
         const p = S.placements[idx];
         p._plucked = !p._plucked;
@@ -5097,9 +5149,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       return;
     }
 
-    // selection buttons
+    // selection buttons (drawn under the camera -> hit-test in board coords)
     for (const b of S.selButtons || []) {
-      if (Math.hypot(pt.x - b.x, pt.y - b.y) <= b.r) {
+      if (Math.hypot(bpt.x - b.x, bpt.y - b.y) <= b.r) {
         if (b.id === 'rotl') rotateSelection(-1);
         if (b.id === 'rotr') rotateSelection(1);
         if (b.id === 'flip') flipSelection();
@@ -5107,12 +5159,12 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         return;
       }
     }
-    // tray wells
+    // tray wells (tray is outside the camera: canvas coords)
     if (pt.y > R.BOARD_H - 6) {
       for (const w of S.wells || []) {
         if (Math.abs(pt.x - w.x) < w.w / 2 && w.count > 0) {
           const defs = Core.PART_DEFS[w.type];
-          const spec = { type: w.type, x: pt.x, y: pt.y };
+          const spec = { type: w.type, x: Math.round(bpt.x), y: Math.round(bpt.y) };
           if (defs.dir) spec.dir = defs.dir[0];
           trayItem(w.type).count--;
           S.drag = { spec, from: 'tray', invalid: true, pointerId: e.pointerId };
@@ -5132,18 +5184,15 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       return;
     }
     // board part
-    const idx = hitPlacement(pt);
+    const idx = hitPlacement(bpt);
     if (idx >= 0) {
       const spec = S.placements[idx];
-      if (S.selection === idx) {
-        // second touch starts drag
-      }
       S.selection = idx;
       const orig = Object.assign({}, spec);
       S.placements.splice(idx, 1);
       S.selection = null;
       rebuildSim();
-      S.drag = { spec, from: 'board', origSpec: orig, invalid: false, grabDx: spec.x - pt.x, grabDy: spec.y - pt.y, pointerId: e.pointerId };
+      S.drag = { spec, from: 'board', origSpec: orig, invalid: false, grabDx: spec.x - bpt.x, grabDy: spec.y - bpt.y, pointerId: e.pointerId };
       A.sfx('pickup');
       return;
     }
@@ -5151,16 +5200,36 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   }
 
   function onPointerMove(e) {
-    if (!S.drag || e.pointerId !== S.drag.pointerId) return;
     const pt = canvasPos(e);
+    if (activePtrs.has(e.pointerId)) activePtrs.set(e.pointerId, pt);
+    if (pinch) {
+      if (!pinch.ids.includes(e.pointerId)) return;
+      const a = activePtrs.get(pinch.ids[0]), b = activePtrs.get(pinch.ids[1]);
+      if (!a || !b) return;
+      const d = Math.max(20, Math.hypot(a.x - b.x, a.y - b.y));
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const z = pinch.cam0.z * (d / pinch.d0);
+      // keep the board point that was under the fingers anchored to them
+      const bx = (pinch.mid0.x - pinch.cam0.x) / pinch.cam0.z;
+      const by = (pinch.mid0.y - pinch.cam0.y) / pinch.cam0.z;
+      cam.z = z;
+      cam.x = mid.x - bx * cam.z;
+      cam.y = mid.y - by * cam.z;
+      clampCam();
+      return;
+    }
+    if (!S.drag || e.pointerId !== S.drag.pointerId) return;
     const d = S.drag;
-    d.spec.x = Math.round(pt.x + (d.grabDx || 0));
-    d.spec.y = Math.round(pt.y + (d.grabDy || 0));
+    const bpt = toBoard(pt);
+    d.spec.x = Math.round(bpt.x + (d.grabDx || 0));
+    d.spec.y = Math.round(bpt.y + (d.grabDy || 0));
     d.overTray = pt.y > R.BOARD_H - 10;
     d.invalid = d.overTray ? true : specInvalid(d.spec);
   }
 
   function onPointerUp(e) {
+    activePtrs.delete(e.pointerId);
+    if (pinch && pinch.ids.includes(e.pointerId)) { pinch = null; return; }
     if (!S.drag || e.pointerId !== S.drag.pointerId) return;
     const d = S.drag;
     S.drag = null;
@@ -5285,6 +5354,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       tray: S.trayStock,
       lory: S.lory,
       uiBoost,
+      cam,
     });
     S.selButtons = out.selButtons || [];
     S.wells = out.wells || [];
@@ -5328,8 +5398,22 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     cv.addEventListener('pointermove', onPointerMove);
     cv.addEventListener('pointerup', onPointerUp);
     cv.addEventListener('pointercancel', onPointerUp);
-    cv.addEventListener('wheel', (e) => { // wheel over selected part rotates it
-      if (S.screen !== 'game' || S.phase !== 'edit' || S.selection == null || S.selection < 0) return;
+    cv.addEventListener('wheel', (e) => {
+      if (S.screen !== 'game') return;
+      // trackpad pinch / ctrl+scroll = camera zoom around the cursor
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const pt = canvasPos(e);
+        if (pt.y >= R.BOARD_H) return;
+        const b = toBoard(pt);
+        cam.z = cam.z * (e.deltaY > 0 ? 0.93 : 1.075);
+        cam.x = pt.x - b.x * cam.z;
+        cam.y = pt.y - b.y * cam.z;
+        clampCam();
+        return;
+      }
+      // plain wheel over a selected part rotates it
+      if (S.phase !== 'edit' || S.selection == null || S.selection < 0) return;
       e.preventDefault();
       const p = S.placements[S.selection];
       const defs = p && Core.PART_DEFS[p.type];
@@ -5352,7 +5436,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
   // tiny read-only debug handle (used by automated tests)
   window.__loryDebug = {
-    get state() { return { screen: S.screen, phase: S.phase, selection: S.selection, placements: S.placements.map(p => Object.assign({}, p)), tray: S.trayStock.map(t => Object.assign({}, t)) }; },
+    get state() { return { screen: S.screen, phase: S.phase, selection: S.selection, placements: S.placements.map(p => Object.assign({}, p)), tray: S.trayStock.map(t => Object.assign({}, t)), cam: Object.assign({}, cam) }; },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
