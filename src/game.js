@@ -650,7 +650,7 @@
     for (const p of S.placements.concat(currentLevel().fixed || [])) {
       if (p.type === 'fan') A.startLoop('fan');
       if (p.type === 'conveyor') A.startLoop('conveyor');
-      if (p.type === 'hydrant') A.startLoop('water');
+      // hydrant water is event-driven now (water_on/water_off)
     }
   }
 

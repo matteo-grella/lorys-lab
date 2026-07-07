@@ -289,13 +289,19 @@ function run(level, placements, seconds = 12, watch = null) {
     fixed: [
       { type: 'shelf', x: 500, y: 500, w: 360, h: 24 },
       { type: 'berry', x: 420, y: 471 },
-      { type: 'bowl', x: 760, y: 655 },
+      { type: 'bowl', x: 850, y: 655 },
     ],
   };
   const fan = Core.simulate(level, [{ type: 'fan', x: 300, y: 470, dir: 'right' }], { maxSeconds: 8 });
   check('fan cannot move the berry (teaching rule intact)', !fan.won);
-  const jet = Core.simulate(level, [{ type: 'hydrant', x: 300, y: 468, dir: 'right' }], { maxSeconds: 10 });
-  check('hydrant water jet pushes the berry off the shelf into the bowl', jet.won, `t=${jet.seconds}s`);
+  const idle = Core.simulate(level, [{ type: 'hydrant', x: 300, y: 468, dir: 'right' }], { maxSeconds: 8 });
+  check('idle hydrant does nothing (needs a trigger)', !idle.won && idle.settled);
+  const jet = Core.simulate(level, [
+    { type: 'hydrant', x: 300, y: 468, dir: 'right' },
+    { type: 'ball_beach', x: 300, y: 330 },   // falls onto the hydrant: valve opens
+  ], { maxSeconds: 10, collectEvents: true });
+  check('bumped hydrant sprays; water pushes the berry into the bowl',
+    jet.won && jet.events.some(e => e.type === 'water_on'), `t=${jet.seconds}s`);
 }
 
 // 20. Hydrant extinguishes a burning fuse -> balloon at the end survives.
@@ -316,6 +322,7 @@ function run(level, placements, seconds = 12, watch = null) {
   const level2 = JSON.parse(JSON.stringify(level));
   level2.fixed[3] = { type: 'hydrant', x: 470, y: 250, dir: 'right' };
   level2.fixed.push({ type: 'hydrant', x: 240, y: 366, dir: 'right' });
+  level2.fixed.push({ type: 'ball_marble', x: 240, y: 260 }); // triggers the douser
   const r2 = Core.simulate(level2, [], { maxSeconds: 10, collectEvents: true });
   check('water dousing the fuse front stops the fire (balloon survives)',
     !r2.won && r2.events.some(e => e.type === 'extinguish'), `settled=${r2.settled}`);
@@ -373,6 +380,42 @@ function run(level, placements, seconds = 12, watch = null) {
   const r = Core.simulate(level, [{ type: 'candle', x: 505, y: 255 }], { maxSeconds: 10, collectEvents: true });
   check('candle flame burns through the rope -> berry drops into bowl',
     r.won && r.events.some(e => e.type === 'snip' && e.cause === 'fire'), `t=${r.seconds}s`);
+}
+
+// 24. Scissors cut a goal balloon's tether string -> it floats up into spikes.
+{
+  const level = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'balloon_goal', x: 500, y: 500 },
+      { type: 'spikes', x: 500, y: 300, angle: 180 },
+    ],
+  };
+  const uncut = Core.simulate(level, [], { maxSeconds: 8 });
+  check('tethered goal balloon bobs in place (no win)', !uncut.won && uncut.settled);
+  const r = Core.simulate(level, [{ type: 'scissors', x: 500, y: 560 }], { maxSeconds: 14, collectEvents: true });
+  check('scissors snip the balloon string -> freed balloon rises into cactus',
+    r.won && r.events.some(e => e.type === 'snip'), `t=${r.seconds}s`);
+}
+
+// 25. Switch drives a hydrant directly (wired device, no bump needed).
+{
+  const level = {
+    goalType: 'catch',
+    fixed: [
+      { type: 'shelf', x: 500, y: 500, w: 360, h: 24 },
+      { type: 'berry', x: 420, y: 471 },
+      { type: 'bowl', x: 760, y: 655 },
+      { type: 'hydrant', x: 300, y: 468, dir: 'right' },
+      { type: 'switch', x: 300, y: 590 },
+      { type: 'shelf', x: 300, y: 610, w: 120, h: 16 },
+    ],
+  };
+  const idle = Core.simulate(level, [], { maxSeconds: 6 });
+  check('switch-wired hydrant stays dry with nothing on the plate', !idle.won && idle.settled);
+  const r = Core.simulate(level, [{ type: 'ball_marble', x: 300, y: 520 }], { maxSeconds: 10, collectEvents: true });
+  check('weight on switch -> hydrant sprays -> berry pushed into bowl',
+    r.won && r.events.some(e => e.type === 'water_on'), `t=${r.seconds}s`);
 }
 
 const fails = results.filter(r => !r.pass);

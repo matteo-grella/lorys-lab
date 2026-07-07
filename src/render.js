@@ -662,6 +662,15 @@
 
     hydrant(c, d, a, o, body) {
       const dir = d.dir || 'right';
+      const active = body && body.plugin.lab.hyd && body.plugin.lab.hyd.active;
+      // sleepy Zz while idle (same language as the magnet)
+      if (body && !active) {
+        c.fillStyle = C.inkSoft; c.font = '700 11px ui-rounded, system-ui, sans-serif';
+        const zt = (o ? o.t : 0) % 2;
+        c.globalAlpha = zt < 1 ? zt : 2 - zt;
+        c.fillText('z', 20, -30 - zt * 6); c.fillText('Z', 26, -38 - zt * 6);
+        c.globalAlpha = 1;
+      }
       c.save();
       if (dir === 'left') c.scale(-1, 1);
       // body
@@ -981,6 +990,8 @@
           break;
         case 'switch_on': fx.ring(e.x, e.y, C.leaf); break;
         case 'switch_off': fx.ring(e.x, e.y, C.inkSoft); break;
+        case 'water_on': fx.ring(e.x, e.y, C.sky); break;
+        case 'water_off': fx.poof(e.x, e.y - 20, 3); break;
         case 'thwack':
           fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 5); fx.poof(e.x, e.y + 10, 4);
           if (e.bodyId != null) squash.set(e.bodyId, { t: 0, nx: 0, ny: 1, amt: 0.3 });
@@ -1230,6 +1241,7 @@
     for (const p of sim.parts) {
       const body = p.bodies[0], m = body.plugin.lab;
       if (p.spec.type === 'hydrant') {
+        if (!m.hyd || !m.hyd.active) continue;
         const dv = m.dir === 'left' ? { x: -1, y: 0 } : m.dir === 'up' ? { x: 0, y: -1 } : { x: 1, y: 0 };
         for (let i = 0; i < 2; i++) {
           const off = (Math.sin(ambT * 13 + i * 3 + body.id) + 1) / 2;

@@ -73,6 +73,8 @@
   const FLAME_R = 22;               // ignition/pop radius around a flame point
   const HYDRANT_REACH = 240;
   const HYDRANT_HALF_WIDTH = 46;
+  const HYDRANT_ACTIVE_FRAMES = 180; // ~3s of water per bump, then it rests
+  const HYDRANT_COOLDOWN_FRAMES = 20;
   const SWITCH_WIRE_REACH = 260;    // links to the nearest fan/conveyor/magnet
   const FIST_LAUNCH = 15;           // punch speed straight up (px/frame)
   const FIST_COOLDOWN = 60;
@@ -195,7 +197,10 @@
         break;
 
       case 'hydrant':
-        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.2 })));
+        // Sleepy like the magnet: a bump on the housing wakes it and it sprays
+        // for HYDRANT_ACTIVE_FRAMES; a wired pressure switch can also drive it.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.2 }),
+          { hyd: { active: false, timer: 0, cooldown: 0 } }));
         break;
 
       case 'switch':
@@ -376,7 +381,7 @@
       const swBody = p.bodies[0];
       let best = null, bd = SWITCH_WIRE_REACH;
       for (const q of parts) {
-        if (!['fan', 'conveyor', 'magnet'].includes(q.spec.type)) continue;
+        if (!['fan', 'conveyor', 'magnet', 'hydrant'].includes(q.spec.type)) continue;
         const d = Math.hypot(q.bodies[0].position.x - swBody.position.x, q.bodies[0].position.y - swBody.position.y);
         if (d < bd) { bd = d; best = q; }
       }
@@ -457,6 +462,18 @@
           }
         }
 
+        // Hydrant wake-up: a bump on the housing opens the valve for ~3s.
+        for (const [hb, o] of [[a, b], [b, a]]) {
+          const hm = lab(hb).hyd;
+          if (hm && !lab(hb).switchControlled && !o.isStatic && !o.isSensor
+            && relSpeed >= 1.6 && hm.cooldown <= 0) {
+            const wasOff = !hm.active;
+            hm.active = true;
+            hm.timer = HYDRANT_ACTIVE_FRAMES;
+            if (wasOff) state.events.push({ type: 'water_on', x: hb.position.x, y: hb.position.y });
+          }
+        }
+
         // Spring-loaded fist: punches whatever lands on it straight up.
         for (const [fb, o] of [[a, b], [b, a]]) {
           const fm = lab(fb).fist;
@@ -516,6 +533,20 @@
       m.rope.cut = true;
       Composite.remove(world, m.rope.constraint);
       m.rope.attached = null;
+      state.events.push({ type: 'snip', x, y, cause: cause || 'blade' });
+    }
+    // a goal balloon's tether string, from the balloon down to its stake
+    function tetherEnds(p) {
+      const b = p.bodies[0], m = lab(b);
+      if (!m.tetherAnchor || m.tetherCut || m.popped) return null;
+      return [{ x: b.position.x, y: b.position.y + (m.r || 24) }, m.tetherAnchor];
+    }
+    function cutTether(p, x, y, cause) {
+      const m = lab(p.bodies[0]);
+      if (!m.tetherAnchor || m.tetherCut) return;
+      m.tetherCut = true;
+      m.tetherAnchor = null;                 // renderer switches to a loose string
+      for (const c of p.constraints) Composite.remove(world, c);
       state.events.push({ type: 'snip', x, y, cause: cause || 'blade' });
     }
     function igniteFuse(fm, body, u) {
@@ -645,10 +676,30 @@
 
       // --- machine shop: water, fire, blades, fists ---------------------------
       // Hydrant jets: push EVERYTHING (water is strong — even berries, unlike
-      // fans) and douse any flame they reach.
+      // fans) and douse any flame they reach. Only while activated: a bump on
+      // the housing (see collisionStart) buys ~3s of spray; a wired switch
+      // drives it directly.
       for (const p of parts) {
         if (p.spec.type !== 'hydrant') continue;
         const hb = p.bodies[0], m = lab(hb);
+        const hy2 = m.hyd;
+        if (m.switchControlled) {
+          if (hy2.active !== !!m.poweredNow) {
+            hy2.active = !!m.poweredNow;
+            state.events.push({ type: hy2.active ? 'water_on' : 'water_off', x: hb.position.x, y: hb.position.y });
+          }
+        } else {
+          if (hy2.cooldown > 0) hy2.cooldown--;
+          if (hy2.active) {
+            hy2.timer--;
+            if (hy2.timer <= 0) {
+              hy2.active = false;
+              hy2.cooldown = HYDRANT_COOLDOWN_FRAMES;
+              state.events.push({ type: 'water_off', x: hb.position.x, y: hb.position.y });
+            }
+          }
+        }
+        if (!hy2.active) continue;
         const dv = dirVector(m.dir);
         const hx = hb.position.x, hy = hb.position.y;
         const cx = hx + dv.x * (30 + HYDRANT_REACH / 2), cy = hy + dv.y * (34 + HYDRANT_REACH / 2);
@@ -735,20 +786,30 @@
           } else if (q.spec.type === 'rope') {
             const ends = ropeEnds(q);
             if (ends && distPointSeg(f, ends[0], ends[1]) < 14) cutRope(q, f.x, f.y, 'fire');
+          } else if (q.spec.type === 'balloon_goal') {
+            const ends = tetherEnds(q);
+            if (ends && distPointSeg(f, ends[0], ends[1]) < 14) cutTether(q, f.x, f.y, 'fire');
           }
         }
       }
 
-      // Scissors cut any rope whose line crosses their blades.
+      // Scissors cut any rope — or balloon string — crossing their blades.
       for (const p of parts) {
         if (p.spec.type !== 'scissors') continue;
         const sb = p.bodies[0], sm = lab(sb);
         for (const q of parts) {
-          if (q.spec.type !== 'rope') continue;
-          const ends = ropeEnds(q);
-          if (ends && segIntersectsOBB(ends[0], ends[1], sb, sm.w / 2, sm.h / 2, 2)) {
-            sm.snips = (sm.snips || 0) + 1;
-            cutRope(q, sb.position.x, sb.position.y, 'blade');
+          if (q.spec.type === 'rope') {
+            const ends = ropeEnds(q);
+            if (ends && segIntersectsOBB(ends[0], ends[1], sb, sm.w / 2, sm.h / 2, 2)) {
+              sm.snips = (sm.snips || 0) + 1;
+              cutRope(q, sb.position.x, sb.position.y, 'blade');
+            }
+          } else if (q.spec.type === 'balloon_goal') {
+            const ends = tetherEnds(q);
+            if (ends && segIntersectsOBB(ends[0], ends[1], sb, sm.w / 2, sm.h / 2, 2)) {
+              sm.snips = (sm.snips || 0) + 1;
+              cutTether(q, sb.position.x, sb.position.y, 'blade');
+            }
           }
         }
       }

@@ -563,6 +563,8 @@
         case 'switch_off': sfx('switchOff'); break;
         case 'ignite': sfx('igniteFizz'); break;
         case 'extinguish': sfx('extinguishHiss'); break;
+        case 'water_on': startLoop('water'); break;
+        case 'water_off': stopLoop('water'); break;
       }
     }
   }
