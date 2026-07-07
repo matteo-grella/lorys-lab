@@ -47,10 +47,15 @@ board, presses ▶, and physics runs a chain reaction. Goals: deliver the berry
 into Lory's bowl (`catch`), ring a bell (`bell`), or pop all goal balloons
 (`pop`). Features: a 24-level campaign, a sandbox, a user puzzle maker with
 persistent saved puzzles, hints rendered as ghost outlines, 3-star sparkle
-pickups, two age modes, and a secret unlock cheat.
+pickups, two age modes, and a secret unlock cheat. The sandbox additionally
+carries the "machine shop": ropes, triggered scissors, candles, fuses,
+bump-activated hydrants, pressure switches, and a rotatable spring fist —
+fire, water, cutting, and remote triggering as composable systems.
 
-**Everything is code-generated**: all art is Canvas 2D paths, all audio is
-WebAudio synthesis. There are zero binary assets. The only third-party code is
+**Everything in-game is code-generated**: all art is Canvas 2D paths, all
+audio is WebAudio synthesis — zero binary assets at runtime. (The repo does
+carry two PNG app icons for the PWA/home-screen install, themselves rendered
+by the game's own Lory-drawing code.) The only third-party code is
 the vendored physics engine `vendor/matter.min.js` (matter-js 0.20.0, MIT).
 
 The **defining engineering property** of this project: the physics module runs
@@ -72,19 +77,26 @@ lorys-lab/
 │   ├── audio.js             WebAudio synth engine  → window.LoryAudio
 │   ├── render.js            Canvas 2D renderer      → window.LoryRender
 │   └── game.js              game shell / UI / state → boots on DOMContentLoaded
-├── index.html               dev page: CSS + <script src> tags (open directly)
+├── index.html               dev page: CSS + <script src> tags + PWA links and
+│                            service-worker registration (open directly)
+├── manifest.json / sw.js    PWA manifest + network-first service worker for
+│                            the GitHub Pages deployment (see §10)
+├── icon-180.png / icon-512.png  app icons (generated from drawLory)
 ├── build.mjs                bundler → dist/ single-file builds
 ├── dist/
 │   ├── lorys-lab.html       standalone build (full HTML document)
 │   ├── artifact.html        body-content-only build for claude.ai artifacts
-│   └── lorys-lab-game.html  copy of artifact.html (the published artifact path)
+│   └── lorys-lab-current.html  copy of artifact.html (the published artifact
+│                            path — the filename rotates when the artifact URL
+│                            has to be re-minted; check build.mjs for current)
 ├── test/
-│   ├── smoke.mjs            18 physics behaviour tests (run in Node)
+│   ├── smoke.mjs            41 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
 ├── design/                  design-time documents (visual spec, audio spec,
 │                            level candidates) — not loaded by the game
-└── doc/MAINTAINERS-GUIDE.md this file
+├── doc/MAINTAINERS-GUIDE.md this file
+└── doc/IOS-APP-GUIDE.md     iPhone/iPad packaging guide (PWA + Capacitor)
 ```
 
 ### Module dependency graph and load order
@@ -114,7 +126,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 |---|---|---|
 | core | game | `createSim(levelDef, placements)` → sim object; `sim.step()` → events array; `sim.state` flags; `PART_DEFS`; `placementOverlaps(sim, spec)`; `simulate(levelDef, placements, opts)` (headless) |
 | core | render | each Matter body carries `body.plugin.lab` metadata (`type,id,w,h,r,dir,spec,...`); event objects for FX |
-| core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on, magnet_off, win` |
+| core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off` |
 | render | game | `R.draw(frame)` returns `{selButtons, wells}` hit-regions the input code uses next frame |
 | levels | game/tests | array of level objects (schema in §5) |
 
@@ -179,7 +191,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 
 | type | size | static | placeable | rot | dir | notes |
 |---|---|---|---|---|---|---|
-| `plank` | 160×20 | ✓ | ✓ | ✓ | – | the only player-rotatable part |
+| `plank` | 160×20 | ✓ | ✓ | ✓ | – | the only rotatable part in campaign trays (the sandbox adds rotatable scissors/fuse/fist) |
 | `trampoline` | 110×24 | ✓ | ✓ | – | – | horizontal only |
 | `seesaw` | 220×16 | dynamic | ✓ | – | – | plank + pivot constraint (see below) |
 | `fan` | 56×56 | ✓ | ✓ | – | right/left/up | wind field, see 4.2 |
@@ -280,8 +292,9 @@ Executed **before** each `Engine.update`:
   collection → flame effects (pop/ignite/relight/burn-rope) → scissors-rope
   intersection → fist cooldown. New events: `snip {cause:'blade'|'fire'}`,
   `ignite`, `extinguish`, `switch_on/off`, `thwack`, `water_on/off`. A burning fuse suppresses
-  the quiescence detector (a pending delay is not "stuck"). Water loop name
-  for hydrants: `'water'` (started per-hydrant in game.js `startLoops`).
+  the quiescence detector (a pending delay is not "stuck"). The `'water'`
+  audio loop is event-driven: `water_on`/`water_off` start/stop it inside
+  audio.js `handleEvents` (NOT in game.js `startLoops`).
 - **Conveyor drive.** For each active collision pair involving a conveyor:
   the other body's x-velocity is steered toward `±3.2` by at most 0.4 px/f²
   per frame, and its angular velocity is damped ×0.9 (so balls ride instead of
@@ -309,9 +322,15 @@ These all run for every new contact pair, in this exact source order
    bounces die out. The `boing` event carries `bodyId`/`partId` for FX.
 5. **Magnet wake** — see 4.2 (bump with `relSpeed ≥ 1.6` while not cooling
    down wakes it / refreshes its timer).
-6. **Bumper ping**: physics is plain restitution 1.0; the handler only emits a
+6. **Hydrant wake** — bump with `relSpeed ≥ 1.6` opens the valve for ~3s
+   (skipped when switch-wired).
+7. **Scissors trigger** — any dynamic touch starts the 12-frame snip window
+   (+45-frame re-arm), emitting `snipclick`.
+8. **Fist triggers** — glove-side contact punches the toucher; back-plunger
+   contact fires the muzzle zone (see the part table).
+9. **Bumper ping**: physics is plain restitution 1.0; the handler only emits a
    `bumper` event (impact ≥ 1.5) for FX/audio.
-7. **Generic `hit` event** for audio/squash: any non-sensor pair with
+10. **Generic `hit` event** for audio/squash: any non-sensor pair with
    `relSpeed > 1.2` emits `{type:'hit', impact, bodyId, x, y, nx, ny, matA, matB}`
    where materials come from the `MATERIAL` map (wood/domino/rubber/marble/
    berry/tramp/bumper/balloon/bell/magnet).
@@ -353,6 +372,13 @@ The game forwards them to `LoryAudio.handleEvents()` and
 | `sparkle` | n, x, y | sparkle collected | audio (rising gliss tier n), render (star burst), game (star chip) |
 | `magnet_on` / `magnet_off` | x, y | magnet wake/tire | audio (clunk + hum loop / wind-down), render (ring/poof; glow state read directly from `plugin.lab.magnet.active`) |
 | `win` | – | goal reached | audio (fanfare + duck). Game triggers overlay via `sim.state.won`, NOT this event. **Do not add a second fanfare in game.js** (that bug existed) |
+| `snipclick` | x, y | scissors triggered (blades snap) | audio (click), render (blade anim) |
+| `snip` | x, y, cause `'blade'\|'fire'` | rope or balloon tether actually cut | audio (snip), render (stars/ring or flame poof + blade anim) |
+| `ignite` | x, y | fuse or candle catches fire | audio (fizz), render (flame burst) |
+| `extinguish` | x, y | water douses a flame | audio (steam hiss), render (poof + droplets) |
+| `switch_on` / `switch_off` | x, y | pressure plate pressed/released | audio (clicks), render (ring) |
+| `thwack` | x, y, bodyId?, partId | fist fired (either trigger) | audio (punch + twang), render (ring/stars + squash) |
+| `water_on` / `water_off` | x, y | hydrant valve opens/closes | audio (water loop start/stop), render (ring/poof); droplet FX read `lab.hyd.active` directly |
 
 If you add an event type, update **both** consumers or nothing will happen —
 they ignore unknown types silently.
@@ -502,14 +528,14 @@ new total) before you build.
 Run everything from the project root:
 
 ```bash
-node test/smoke.mjs      # 18 physics behaviour tests — every part mechanic
+node test/smoke.mjs      # 41 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext
 node --check src/*.js    # syntax gate for every module
 node build.mjs           # regenerates dist/ (see §10)
 ```
 
-**Definition of green**: smoke 18/18, verify N/N (currently 24/24),
+**Definition of green**: smoke N/N (currently 41/41), verify N/N (currently 24/24),
 audio-shape passes, all `--check`s pass.
 
 ### Browser E2E (Playwright)
@@ -549,7 +575,9 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   (`design/visual-spec.md`). Always use tokens, never raw hexes.
 - **Background**: painted once into an offscreen canvas (`paintBackground`) —
   wall gradient, polka dots, crayon doodles, vignette, skirting + floor.
-  Re-created only on `init`.
+  Repainted by `setView(w)` whenever the full-bleed canvas width changes
+  (every resize/orientation change goes through it); includes the makers'
+  mark and, when wider than the board, the bench-end posts.
 - **`painters` registry**: one function per part type,
   `painters[type](ctx, d, animState, o, body)` where `d = {type,w,h,r,dir,seed}`.
   The caller (`drawPart`) has already translated to the body position and
@@ -581,7 +609,7 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   no physics or trajectory is touched, so level proofs are unaffected.
 - **Particles**: single pool (hard cap 260 in `spawn()` — the only enforced
   bound), kinds: confetti (`fx.confetti(x,y,n)`, n defaults to 80), poof,
-  star, ring, shard, wind. **All motion is scaled by `dt*60`** so speed is
+  star, ring, shard, wind, drop (water droplets), flamep (flame flickers). **All motion is scaled by `dt*60`** so speed is
   refresh-rate independent (there was a 120 Hz bug). Public triggers:
   `R.fx.confetti/poof/stars/ring/shards/windPuff`.
 - **Lory the mascot**: `drawLory(ctx, pose, t)` draws a 100×100 lorikeet;
@@ -601,11 +629,11 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   `uiBoost`, 1 on desktop/iPad, up to 1.7 on phones) — all sizes and the
   returned hit radii scale by it.
 - **Tray**: `drawTray(c, tray, o, dragType, boost)` computes adaptive well
-  sizes (`wellW = min(88*boost, 1250/n)` — the 19-well sandbox stays
-  width-bound and unaffected) and returns well hit-regions
+  sizes (`wellW = min(88*boost, (viewW-30)/n)` — the 26-well sandbox is width-bound
+  on desktop and gains room on full-bleed phones) and returns well hit-regions
   `{type, x, y, w, count}`.
 - **`draw(frame)`** is the single entry point; frame =
-  `{sim, running, t, dt, selection, dragGhost, hints, tray, lory}`;
+  `{sim, running, t, dt, selection, dragGhost, hints, tray, lory, uiBoost, cam}`;
   returns `{selButtons, wells}` for input hit-testing.
 
 Draw order: background → Lory+bubble → wind zones → static parts → dynamic
@@ -630,12 +658,13 @@ Public API (`window.LoryAudio`):
 - `unlock()` — create/resume context; **safe to call repeatedly**; must be
   called from a user gesture (game.js does it on first pointerdown).
 - `sfx(name, {strength})` — one-shots. Names: `pickup, place, rotate, invalid,
+  snip, thwack, switchOn, switchOff, igniteFizz, extinguishHiss,
   play, win, lose, button, levelpop, catch, pop, bell` + internal material
   sounds. Silent no-op before unlock or when disabled.
 - `handleEvents(events)` — maps sim events to sounds (material mapping:
   marble→clack, domino→tick, rubber→boing, magnet+impact>3→clank,
   else wood knock; impact→strength = `clamp(impact/12, 0.15, 1)`).
-- `startLoop(name)` / `stopLoop(name)` for `fan|conveyor|magnet|balloon` —
+- `startLoop(name)` / `stopLoop(name)` for `fan|conveyor|magnet|balloon|water` —
   **reference-counted** per name; `stopAllLoops()` force-stops everything and
   is what the game calls at the end of every run (multiple awake magnets made
   per-name decrements leak — don't go back to that).
@@ -749,9 +778,9 @@ silently. All shapes are defaulted on load — never assume fields exist.
 - **Start fresh (full reset)**: `showResetConfirm()` on the title screen —
   two-step confirm dialog; erases `progress`, `allUnlocked`, `myPuzzles`,
   `puzzleWins`, `puzzleSeq` but **keeps settings** (mode/sfx/music/juice).
-  Sound/music/✨ toggles also exist on the title screen (`#tSfx/#tMusic/
-  #tJuice`) mirroring the in-game topbar buttons.
-- **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (19 entries incl.
+  The title screen carries only a music toggle (`#tMusic`, labeled) next to
+  Start fresh; sound effects toggle only in the in-game topbar (`#sfxBtn`).
+- **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (26 entries incl. the machine shop and
   fixed-only parts); no stuck detection; win events celebrate (confetti +
   reset of `won/caughtFrames/bellRung`) but never end the run.
 - **Puzzle maker**: `S.pluckMode`. Flow: validate berry+bowl exist → taps
@@ -774,16 +803,33 @@ silently. All shapes are defaulted on load — never assume fields exist.
 
 1. **`dist/lorys-lab.html`** — the standalone game: `index.html` with all six
    scripts inlined. Open directly in any browser. This is the canonical build.
-2. **`dist/artifact.html`** + **`dist/lorys-lab-game.html`** (identical copy) —
+2. **`dist/artifact.html`** + **`dist/lorys-lab-current.html`** (identical copy) —
    the claude.ai artifact variant: **no** `<!DOCTYPE>/<html>/<head>/<body>`
    (the artifact host wraps content in its own skeleton), a `<title>` tag,
    and a theme-aware backdrop (`--lab-backdrop` custom property redefined for
    `prefers-color-scheme: dark` and `:root[data-theme=…]` overrides).
-   The published artifact points at `dist/lorys-lab-game.html`; build.mjs
+   The published artifact points at `dist/lorys-lab-current.html`; build.mjs
    refreshes it, so republishing that same path updates the same URL.
 
 The artifact host enforces a strict CSP: **no external requests of any kind**.
 Everything must stay inlined; never add a CDN `<script>`/`<link>`/font URL.
+
+### The hosted PWA (GitHub Pages) — the third deployment target
+
+The repository itself is served at **https://matteo-grella.github.io/lorys-lab/**
+(GitHub Pages from `main`, root). This deployment does NOT use `dist/` — Pages
+serves `index.html` + `src/*.js` directly, plus `manifest.json`, the icons,
+and `sw.js` (a **network-first** service worker with ETag revalidation:
+deploys are visible on the first online load, offline play falls back to
+cache; a new worker auto-reloads the page once via the `controllerchange`
+handler in index.html). The standalone/artifact builds strip the PWA link
+tags, so none of this leaks into the single-file outputs.
+
+**Deploy procedure**: run the tests, `node build.mjs`, **bump the `CACHE`
+version string in `sw.js`** (e.g. `lorys-lab-v12` → `-v13` — this is the step
+that must never be skipped: it purges installed devices' old caches), commit,
+`git push origin main`. Pages redeploys in ~1 minute; verify with a hash
+compare of a served file against the local copy.
 
 After every build, sanity-check `dist/lorys-lab.html` in a browser (or via the
 Playwright pattern in §6) before publishing.
@@ -959,7 +1005,8 @@ E2E scripts must assert `pageerror` count is zero.
 10. **Keyboard handlers ignore INPUT/TEXTAREA targets**; the levels-screen
     secret key must not interfere with the puzzle-name dialog.
 11. **Artifact build has no document skeleton and no external URLs** (CSP).
-    The published artifact path is `dist/lorys-lab-game.html`.
+    The published artifact path is written in `build.mjs` (currently
+    `dist/lorys-lab-current.html`).
 12. **All art via palette tokens, all text child-readable, touch targets
     ≥ 44 px** — this is a game for five-year-olds; every regression here is a
     real regression.
@@ -968,3 +1015,7 @@ E2E scripts must assert `pageerror` count is zero.
     mid-run editing.
 14. `localStorage` access is always guarded; failures surface a visible
     warning, never silence.
+15. **The makers' mark on the wall stays.** It is painted in
+    `render.js paintBackground()` from a base64-encoded constant so the
+    names never appear literally in source — it is the project's watermark
+    and ships in every build.
