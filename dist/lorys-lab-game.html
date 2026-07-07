@@ -12,6 +12,7 @@
   :root[data-theme="light"] { --lab-backdrop: #E9D9BE; }
   :root[data-theme="dark"] { --lab-backdrop: #332B22; }
   html, body { height: 100%; overflow: hidden; background: var(--lab-backdrop); }
+  @supports (height: 100dvh) { html, body { height: 100dvh; } }
   body { font-family: ui-rounded, -apple-system, "Segoe UI", system-ui, sans-serif; color: var(--ink); }
   #app {
     position: absolute; left: 50%; top: 50%;
@@ -26,11 +27,14 @@
   .topbar { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; align-items: center; pointer-events: none; }
   .topbar > * { pointer-events: auto; }
   .chip {
-    background: var(--paper); border: none; border-radius: 28px; min-height: 52px;
-    padding: 0 20px; font: 700 18px ui-rounded, system-ui, sans-serif; color: var(--ink);
+    background: var(--paper); border: none; border-radius: 28px;
+    min-height: calc(52px * var(--uiboost, 1));
+    padding: 0 20px; color: var(--ink);
+    font: 700 calc(18px * var(--uiboost, 1)) ui-rounded, system-ui, sans-serif;
     box-shadow: 0 3px 0 rgba(67,52,43,0.25); display: flex; align-items: center; gap: 6px;
   }
-  .chip.btn { cursor: pointer; min-width: 56px; justify-content: center; font-size: 22px; transition: transform 0.12s; }
+  .chip.btn { cursor: pointer; min-width: calc(56px * var(--uiboost, 1)); justify-content: center;
+    font-size: calc(22px * var(--uiboost, 1)); transition: transform 0.12s; }
   .chip.btn.labeled { font-size: 17px; background: var(--sunny); box-shadow: 0 3px 0 #C99A20; white-space: nowrap; }
   .chip.btn:hover { transform: scale(1.06); }
   .chip.btn:active { transform: translateY(3px); box-shadow: 0 0 0 rgba(0,0,0,0); }
@@ -38,9 +42,10 @@
   /* play button */
   .playbtn {
     position: absolute; right: 22px; bottom: 128px;
-    width: 92px; height: 92px; border-radius: 50%;
+    width: calc(92px * var(--uiboost, 1)); height: calc(92px * var(--uiboost, 1));
+    border-radius: 50%;
     border: none; background: var(--leaf); color: var(--paper);
-    font-size: 40px; cursor: pointer;
+    font-size: calc(40px * var(--uiboost, 1)); cursor: pointer;
     box-shadow: 0 6px 0 #3E8039, 0 10px 24px rgba(67,52,43,0.3);
     transition: transform 0.15s, background 0.25s, border-radius 0.25s;
   }
@@ -142,6 +147,19 @@
     font-weight: 700; font-size: 18px; opacity: 0; transition: 0.25s; pointer-events: none;
   }
   .toast.show { opacity: 0.95; transform: translateX(-50%); }
+
+  /* portrait rotate nudge (unscaled, on top of everything) */
+  #rotateOverlay {
+    position: fixed; inset: 0; z-index: 99; display: none;
+    align-items: center; justify-content: center;
+    background: linear-gradient(#FBF1DE, #F5DFC3);
+  }
+  .ro-card {
+    text-align: center; font: 800 22px ui-rounded, system-ui, sans-serif; color: var(--ink);
+    padding: 30px; max-width: 320px;
+  }
+  .ro-icon { font-size: 64px; margin-bottom: 18px; animation: rotwiggle 1.6s ease-in-out infinite; }
+  @keyframes rotwiggle { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-90deg); } }
 
   @keyframes fadein { from { opacity: 0; } }
   @keyframes popin { from { transform: translate(-50%, -46%) scale(0.7); opacity: 0; } }
@@ -4031,8 +4049,10 @@
     c.restore();
   }
 
-  // selection halo + toy buttons (positions returned for hit-testing)
-  function drawSelection(c, sel, o) {
+  // selection halo + toy buttons (positions returned for hit-testing).
+  // boost (>=1) enlarges buttons on small screens so fingers can hit them.
+  function drawSelection(c, sel, o, boost) {
+    const B = boost || 1;
     const defs = window.LoryCore.PART_DEFS[sel.type];
     const w = (sel.w || defs.w || defs.r * 2), h = (sel.h || defs.h || defs.r * 2);
     c.save();
@@ -4045,35 +4065,38 @@
     c.restore();
     const btns = [];
     // above the part normally; below it when that would collide with the topbar
-    let topY = sel.y - Math.max(w, h) / 2 - 44;
-    if (topY < 92) topY = sel.y + Math.max(w, h) / 2 + 44;
+    let topY = sel.y - Math.max(w, h) / 2 - 44 * B;
+    if (topY < 92 * B) topY = sel.y + Math.max(w, h) / 2 + 44 * B;
     const defsBtns = [];
     if (defs.rot) defsBtns.push({ id: 'rotl', icon: '⟲', col: C.loryBlue }, { id: 'rotr', icon: '⟳', col: C.loryBlue });
     if (defs.dir) defsBtns.push({ id: 'flip', icon: '⇄', col: C.tangerine });
-    defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 });
-    let total = defsBtns.length * 54 - 10 + 14;
-    let cx0 = clamp(sel.x - total / 2 + 22, 30, BOARD_W - total);
+    defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
+    const pitch = 54 * B;
+    let total = defsBtns.length * pitch - 10 * B + 14 * B;
+    let cx0 = clamp(sel.x - total / 2 + 22 * B, 30, BOARD_W - total);
     let run = 0;
     defsBtns.forEach((b, i) => {
       run += b.gap || 0;
-      const bx = cx0 + i * 54 + run, by = clamp(topY, 40, 655);
+      const bx = cx0 + i * pitch + run, by = clamp(topY, 40, 660 - 24 * B);
       c.save();
-      c.fillStyle = b.col; circle(c, bx, by + 3, 22); c.fill();
+      c.fillStyle = b.col; circle(c, bx, by + 3 * B, 22 * B); c.fill();
       const dk = b.col === C.loryBlue ? C.blueDeep : b.col === C.poppy ? '#B93A28' : '#C96A22';
       c.fillStyle = dk;
-      c.beginPath(); c.arc(bx, by + 3, 22, 0.15 * Math.PI, 0.85 * Math.PI); c.fill();
-      c.fillStyle = b.col; circle(c, bx, by, 21); c.fill();
-      c.fillStyle = C.paper; c.font = '800 20px ui-rounded, system-ui, sans-serif';
+      c.beginPath(); c.arc(bx, by + 3 * B, 22 * B, 0.15 * Math.PI, 0.85 * Math.PI); c.fill();
+      c.fillStyle = b.col; circle(c, bx, by, 21 * B); c.fill();
+      c.fillStyle = C.paper; c.font = `800 ${Math.round(20 * B)}px ui-rounded, system-ui, sans-serif`;
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillText(b.icon, bx, by + 1);
       c.restore();
-      btns.push({ id: b.id, x: bx, y: by, r: 28 });
+      btns.push({ id: b.id, x: bx, y: by, r: 28 * B });
     });
     return btns;
   }
 
-  // tray
-  function drawTray(c, tray, o, dragType) {
+  // tray. boost enlarges wells on small screens where the level's tray is
+  // small enough to still fit (the 19-well sandbox stays width-bound).
+  function drawTray(c, tray, o, dragType, boost) {
+    const B = boost || 1;
     const y0 = BOARD_H;
     c.save();
     c.fillStyle = C.woodLight;
@@ -4082,8 +4105,8 @@
     c.beginPath(); c.moveTo(0, y0 + 1); c.lineTo(BOARD_W, y0 + 1); c.stroke();
     const wells = [];
     const n = tray.length;
-    const wellW = Math.min(88, (BOARD_W - 30) / Math.max(n, 1));
-    const box = Math.min(68, wellW - 6);
+    const wellW = Math.min(88 * B, (BOARD_W - 30) / Math.max(n, 1));
+    const box = Math.min(68 * Math.min(B, 1.45), wellW - 6, TRAY_H - 8);
     const total = n * wellW;
     let x = BOARD_W / 2 - total / 2;
     c.font = '700 12px ui-rounded, system-ui, sans-serif';
@@ -4094,7 +4117,7 @@
       c.strokeStyle = 'rgba(67,52,43,0.15)'; c.lineWidth = 1.5; rr(c, cx - box / 2, cy - box / 2, box, box, 14); c.stroke();
       const defs = window.LoryCore.PART_DEFS[item.type];
       const dim = Math.max(defs.w || defs.r * 2, defs.h || defs.r * 2);
-      const sc = Math.min(0.62, (box - 16) / dim);
+      const sc = Math.min(0.62 * B, (box - 16) / dim);
       c.save();
       c.translate(cx, cy);
       c.scale(sc, sc);
@@ -4181,7 +4204,7 @@
 
     // selection
     let selButtons = null;
-    if (selection) selButtons = drawSelection(ctx, selection, o);
+    if (selection) selButtons = drawSelection(ctx, selection, o, frame.uiBoost);
 
     // drag ghost
     if (dragGhost) drawGhost(ctx, dragGhost, o, { invalid: dragGhost.invalid, lift: true });
@@ -4190,7 +4213,7 @@
 
     // tray
     let wells = null;
-    if (tray) wells = drawTray(ctx, tray, o, dragGhost && dragGhost.type);
+    if (tray) wells = drawTray(ctx, tray, o, dragGhost && dragGhost.type, frame.uiBoost);
 
     return { selButtons, wells };
   }
@@ -4415,6 +4438,11 @@
     app.appendChild(el('div', 'overlay-root'));
     // toast
     app.appendChild(el('div', 'toast'));
+    // portrait rotate nudge (outside #app so it isn't scaled down with it)
+    const ro = el('div');
+    ro.id = 'rotateOverlay';
+    ro.innerHTML = `<div class="ro-card"><div class="ro-icon">📱↻</div>Turn your ${'ontouchstart' in window ? 'device' : 'screen'} sideways to play!</div>`;
+    document.body.appendChild(ro);
 
     $('#backBtn').onclick = () => { A.sfx('button'); stopRun(); exitPluckMode(false); showScreen('levels'); };
     $('#hintBtn').onclick = onHint;
@@ -4688,9 +4716,12 @@
     const halfH = (defs.h || defs.r * 2) / 2, halfW = (defs.w || defs.r * 2) / 2;
     if (spec.y > R.FLOOR_Y - halfH + 4 || spec.y < 40 || spec.x < 30 || spec.x > APP_W - 30) return true;
     // keep the zone under the floating Play button drop-free: a part there
-    // would sit underneath the DOM button and become ungrabbable
+    // would sit underneath the DOM button and become ungrabbable. The button
+    // grows with uiBoost on phones, so the zone does too (no stored solution
+    // uses this corner — checked against all 24 levels).
     const half = Math.max(halfW, halfH);
-    if (spec.x + half > 1148 && spec.y + half > 592) return true;
+    const bw = 92 * uiBoost + 40;
+    if (spec.x + half > APP_W - bw && spec.y + half > R.BOARD_H - 130 - 92 * uiBoost) return true;
     // test against a sim WITHOUT the dragged part (S.sim is rebuilt at drag start)
     return Core.placementOverlaps(S.sim, spec);
   }
@@ -4989,8 +5020,8 @@
     const hits = Core.Matter.Query.point(bodies, pt);
     let body = hits[hits.length - 1];
     if (!body) {
-      // generous radius for small parts (kids!)
-      let best = null, bd = 30;
+      // generous radius for small parts (kids!) — wider still on phones
+      let best = null, bd = 30 * uiBoost;
       for (const b of bodies) {
         const d = Math.hypot(b.position.x - pt.x, b.position.y - pt.y) - Math.min(30, Math.max(b.plugin.lab.w || 0, (b.plugin.lab.r || 0) * 2) / 2);
         if (d < bd) { bd = d; best = b; }
@@ -5216,6 +5247,7 @@
       hints: S.hints,
       tray: S.trayStock,
       lory: S.lory,
+      uiBoost,
     });
     S.selButtons = out.selButtons || [];
     S.wells = out.wells || [];
@@ -5224,10 +5256,23 @@
   // ---------------------------------------------------------------------------
   // layout scale
   // ---------------------------------------------------------------------------
+  let appScale = 1, uiBoost = 1;
   function layout() {
     const app = $('#app');
-    const s = Math.min(window.innerWidth / APP_W, window.innerHeight / APP_H);
-    app.style.transform = `translate(-50%, -50%) scale(${s})`;
+    // visualViewport tracks iOS Safari's collapsing bars; innerHeight lags it
+    const vw = (window.visualViewport && window.visualViewport.width) || window.innerWidth;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    appScale = Math.min(vw / APP_W, vh / APP_H);
+    app.style.transform = `translate(-50%, -50%) scale(${appScale})`;
+    // Touch-target compensation: on small screens (phones) draw UI bigger so
+    // physical tap sizes stay usable. 1 on desktop/iPad, up to 1.7 on phones.
+    uiBoost = Math.max(1, Math.min(1.7, 0.75 / appScale));
+    document.documentElement.style.setProperty('--uiboost', uiBoost);
+    // Portrait nudge (touch devices only — desktop narrow windows are fine)
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const portrait = vh > vw;
+    const ro = $('#rotateOverlay');
+    if (ro) ro.style.display = (coarse && portrait) ? 'flex' : 'none';
   }
 
   // ---------------------------------------------------------------------------
@@ -5240,6 +5285,8 @@
     buildDom();
     layout();
     window.addEventListener('resize', layout);
+    window.addEventListener('orientationchange', () => setTimeout(layout, 120));
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', layout);
     cv.addEventListener('pointerdown', onPointerDown);
     cv.addEventListener('pointermove', onPointerMove);
     cv.addEventListener('pointerup', onPointerUp);

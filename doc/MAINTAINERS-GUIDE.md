@@ -131,9 +131,17 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
   **no ceiling** — things can fly off the top and come back down.
 - Usable design area for level content: **x 40..1240, y 60..660** (keeps parts
   clear of the topbar chips and the floor).
-- The bottom-right rectangle `x + half > 1148 && y + half > 592` is a
-  **placement dead zone** (the floating DOM Play button sits over it; a part
-  there would be ungrabbable). Enforced in `game.js specInvalid()`.
+- The bottom-right corner under the floating DOM Play button is a
+  **placement dead zone** (a part there would be ungrabbable). Enforced in
+  `game.js specInvalid()`; its size scales with `uiBoost` since the button
+  grows on phones. No stored level solution uses that corner (verified).
+- **Mobile (Tier-1 support)**: `layout()` uses `visualViewport` (tracks iOS
+  Safari's collapsing bars; also listens to `orientationchange` +
+  `visualViewport.resize`), computes `uiBoost = clamp(0.75/appScale, 1, 1.7)`
+  and publishes it as the CSS var `--uiboost` (DOM chips + play button scale
+  with it) and into `R.draw(frame.uiBoost)` (canvas tray/selection scale). A
+  full-screen `#rotateOverlay` ("turn your device sideways") shows on
+  coarse-pointer devices in portrait. `100dvh` handles the URL-bar height.
 - Physics steps at a **fixed 60 Hz** (`Engine.update(engine, 1000/60)`), with
   `positionIterations = 8`, `velocityIterations = 6`, `gravity.y = 1`.
   Speeds in this doc are in **px per frame** (px/f); 1 px/f = 60 px/s.
@@ -548,12 +556,16 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   `{invalid, lift}` (red ✕ overlay when placement is illegal).
 - **Plucked parts** (puzzle maker): if `spec._plucked` is truthy the part
   renders at 35% alpha with an orange dashed box + 🧩 badge.
-- **Selection UI**: `drawSelection` returns button hit-circles
-  (`{id:'rotl'|'rotr'|'flip'|'del', x, y, r:28}`). Buttons render above the
-  part, or **below** it when the part is near the top (they must never hide
-  under the DOM topbar, y < 92). The ✕ delete button gets extra spacing.
-- **Tray**: `drawTray` computes adaptive well sizes
-  (`wellW = min(88, 1250/n)`) and returns well hit-regions
+- **Selection UI**: `drawSelection(c, sel, o, boost)` returns button
+  hit-circles (`{id:'rotl'|'rotr'|'flip'|'del', x, y, r:28*boost}`). Buttons
+  render above the part, or **below** it when the part is near the top (they
+  must never hide under the DOM topbar). The ✕ delete button gets extra
+  spacing. `boost` is the mobile touch-target compensation (see game.js
+  `uiBoost`, 1 on desktop/iPad, up to 1.7 on phones) — all sizes and the
+  returned hit radii scale by it.
+- **Tray**: `drawTray(c, tray, o, dragType, boost)` computes adaptive well
+  sizes (`wellW = min(88*boost, 1250/n)` — the 19-well sandbox stays
+  width-bound and unaffected) and returns well hit-regions
   `{type, x, y, w, count}`.
 - **`draw(frame)`** is the single entry point; frame =
   `{sim, running, t, dt, selection, dragGhost, hints, tray, lory}`;

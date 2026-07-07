@@ -21,6 +21,7 @@
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; overflow: hidden; background: #E9D9BE; }
+  @supports (height: 100dvh) { html, body { height: 100dvh; } }
   body { font-family: ui-rounded, -apple-system, "Segoe UI", system-ui, sans-serif; color: var(--ink); }
   #app {
     position: absolute; left: 50%; top: 50%;
@@ -35,11 +36,14 @@
   .topbar { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; align-items: center; pointer-events: none; }
   .topbar > * { pointer-events: auto; }
   .chip {
-    background: var(--paper); border: none; border-radius: 28px; min-height: 52px;
-    padding: 0 20px; font: 700 18px ui-rounded, system-ui, sans-serif; color: var(--ink);
+    background: var(--paper); border: none; border-radius: 28px;
+    min-height: calc(52px * var(--uiboost, 1));
+    padding: 0 20px; color: var(--ink);
+    font: 700 calc(18px * var(--uiboost, 1)) ui-rounded, system-ui, sans-serif;
     box-shadow: 0 3px 0 rgba(67,52,43,0.25); display: flex; align-items: center; gap: 6px;
   }
-  .chip.btn { cursor: pointer; min-width: 56px; justify-content: center; font-size: 22px; transition: transform 0.12s; }
+  .chip.btn { cursor: pointer; min-width: calc(56px * var(--uiboost, 1)); justify-content: center;
+    font-size: calc(22px * var(--uiboost, 1)); transition: transform 0.12s; }
   .chip.btn.labeled { font-size: 17px; background: var(--sunny); box-shadow: 0 3px 0 #C99A20; white-space: nowrap; }
   .chip.btn:hover { transform: scale(1.06); }
   .chip.btn:active { transform: translateY(3px); box-shadow: 0 0 0 rgba(0,0,0,0); }
@@ -47,9 +51,10 @@
   /* play button */
   .playbtn {
     position: absolute; right: 22px; bottom: 128px;
-    width: 92px; height: 92px; border-radius: 50%;
+    width: calc(92px * var(--uiboost, 1)); height: calc(92px * var(--uiboost, 1));
+    border-radius: 50%;
     border: none; background: var(--leaf); color: var(--paper);
-    font-size: 40px; cursor: pointer;
+    font-size: calc(40px * var(--uiboost, 1)); cursor: pointer;
     box-shadow: 0 6px 0 #3E8039, 0 10px 24px rgba(67,52,43,0.3);
     transition: transform 0.15s, background 0.25s, border-radius 0.25s;
   }
@@ -151,6 +156,19 @@
     font-weight: 700; font-size: 18px; opacity: 0; transition: 0.25s; pointer-events: none;
   }
   .toast.show { opacity: 0.95; transform: translateX(-50%); }
+
+  /* portrait rotate nudge (unscaled, on top of everything) */
+  #rotateOverlay {
+    position: fixed; inset: 0; z-index: 99; display: none;
+    align-items: center; justify-content: center;
+    background: linear-gradient(#FBF1DE, #F5DFC3);
+  }
+  .ro-card {
+    text-align: center; font: 800 22px ui-rounded, system-ui, sans-serif; color: var(--ink);
+    padding: 30px; max-width: 320px;
+  }
+  .ro-icon { font-size: 64px; margin-bottom: 18px; animation: rotwiggle 1.6s ease-in-out infinite; }
+  @keyframes rotwiggle { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-90deg); } }
 
   @keyframes fadein { from { opacity: 0; } }
   @keyframes popin { from { transform: translate(-50%, -46%) scale(0.7); opacity: 0; } }

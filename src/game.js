@@ -197,6 +197,11 @@
     app.appendChild(el('div', 'overlay-root'));
     // toast
     app.appendChild(el('div', 'toast'));
+    // portrait rotate nudge (outside #app so it isn't scaled down with it)
+    const ro = el('div');
+    ro.id = 'rotateOverlay';
+    ro.innerHTML = `<div class="ro-card"><div class="ro-icon">📱↻</div>Turn your ${'ontouchstart' in window ? 'device' : 'screen'} sideways to play!</div>`;
+    document.body.appendChild(ro);
 
     $('#backBtn').onclick = () => { A.sfx('button'); stopRun(); exitPluckMode(false); showScreen('levels'); };
     $('#hintBtn').onclick = onHint;
@@ -470,9 +475,12 @@
     const halfH = (defs.h || defs.r * 2) / 2, halfW = (defs.w || defs.r * 2) / 2;
     if (spec.y > R.FLOOR_Y - halfH + 4 || spec.y < 40 || spec.x < 30 || spec.x > APP_W - 30) return true;
     // keep the zone under the floating Play button drop-free: a part there
-    // would sit underneath the DOM button and become ungrabbable
+    // would sit underneath the DOM button and become ungrabbable. The button
+    // grows with uiBoost on phones, so the zone does too (no stored solution
+    // uses this corner — checked against all 24 levels).
     const half = Math.max(halfW, halfH);
-    if (spec.x + half > 1148 && spec.y + half > 592) return true;
+    const bw = 92 * uiBoost + 40;
+    if (spec.x + half > APP_W - bw && spec.y + half > R.BOARD_H - 130 - 92 * uiBoost) return true;
     // test against a sim WITHOUT the dragged part (S.sim is rebuilt at drag start)
     return Core.placementOverlaps(S.sim, spec);
   }
@@ -771,8 +779,8 @@
     const hits = Core.Matter.Query.point(bodies, pt);
     let body = hits[hits.length - 1];
     if (!body) {
-      // generous radius for small parts (kids!)
-      let best = null, bd = 30;
+      // generous radius for small parts (kids!) — wider still on phones
+      let best = null, bd = 30 * uiBoost;
       for (const b of bodies) {
         const d = Math.hypot(b.position.x - pt.x, b.position.y - pt.y) - Math.min(30, Math.max(b.plugin.lab.w || 0, (b.plugin.lab.r || 0) * 2) / 2);
         if (d < bd) { bd = d; best = b; }
@@ -998,6 +1006,7 @@
       hints: S.hints,
       tray: S.trayStock,
       lory: S.lory,
+      uiBoost,
     });
     S.selButtons = out.selButtons || [];
     S.wells = out.wells || [];
@@ -1006,10 +1015,23 @@
   // ---------------------------------------------------------------------------
   // layout scale
   // ---------------------------------------------------------------------------
+  let appScale = 1, uiBoost = 1;
   function layout() {
     const app = $('#app');
-    const s = Math.min(window.innerWidth / APP_W, window.innerHeight / APP_H);
-    app.style.transform = `translate(-50%, -50%) scale(${s})`;
+    // visualViewport tracks iOS Safari's collapsing bars; innerHeight lags it
+    const vw = (window.visualViewport && window.visualViewport.width) || window.innerWidth;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    appScale = Math.min(vw / APP_W, vh / APP_H);
+    app.style.transform = `translate(-50%, -50%) scale(${appScale})`;
+    // Touch-target compensation: on small screens (phones) draw UI bigger so
+    // physical tap sizes stay usable. 1 on desktop/iPad, up to 1.7 on phones.
+    uiBoost = Math.max(1, Math.min(1.7, 0.75 / appScale));
+    document.documentElement.style.setProperty('--uiboost', uiBoost);
+    // Portrait nudge (touch devices only — desktop narrow windows are fine)
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const portrait = vh > vw;
+    const ro = $('#rotateOverlay');
+    if (ro) ro.style.display = (coarse && portrait) ? 'flex' : 'none';
   }
 
   // ---------------------------------------------------------------------------
@@ -1022,6 +1044,8 @@
     buildDom();
     layout();
     window.addEventListener('resize', layout);
+    window.addEventListener('orientationchange', () => setTimeout(layout, 120));
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', layout);
     cv.addEventListener('pointerdown', onPointerDown);
     cv.addEventListener('pointermove', onPointerMove);
     cv.addEventListener('pointerup', onPointerUp);

@@ -1009,8 +1009,10 @@
     c.restore();
   }
 
-  // selection halo + toy buttons (positions returned for hit-testing)
-  function drawSelection(c, sel, o) {
+  // selection halo + toy buttons (positions returned for hit-testing).
+  // boost (>=1) enlarges buttons on small screens so fingers can hit them.
+  function drawSelection(c, sel, o, boost) {
+    const B = boost || 1;
     const defs = window.LoryCore.PART_DEFS[sel.type];
     const w = (sel.w || defs.w || defs.r * 2), h = (sel.h || defs.h || defs.r * 2);
     c.save();
@@ -1023,35 +1025,38 @@
     c.restore();
     const btns = [];
     // above the part normally; below it when that would collide with the topbar
-    let topY = sel.y - Math.max(w, h) / 2 - 44;
-    if (topY < 92) topY = sel.y + Math.max(w, h) / 2 + 44;
+    let topY = sel.y - Math.max(w, h) / 2 - 44 * B;
+    if (topY < 92 * B) topY = sel.y + Math.max(w, h) / 2 + 44 * B;
     const defsBtns = [];
     if (defs.rot) defsBtns.push({ id: 'rotl', icon: '⟲', col: C.loryBlue }, { id: 'rotr', icon: '⟳', col: C.loryBlue });
     if (defs.dir) defsBtns.push({ id: 'flip', icon: '⇄', col: C.tangerine });
-    defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 });
-    let total = defsBtns.length * 54 - 10 + 14;
-    let cx0 = clamp(sel.x - total / 2 + 22, 30, BOARD_W - total);
+    defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
+    const pitch = 54 * B;
+    let total = defsBtns.length * pitch - 10 * B + 14 * B;
+    let cx0 = clamp(sel.x - total / 2 + 22 * B, 30, BOARD_W - total);
     let run = 0;
     defsBtns.forEach((b, i) => {
       run += b.gap || 0;
-      const bx = cx0 + i * 54 + run, by = clamp(topY, 40, 655);
+      const bx = cx0 + i * pitch + run, by = clamp(topY, 40, 660 - 24 * B);
       c.save();
-      c.fillStyle = b.col; circle(c, bx, by + 3, 22); c.fill();
+      c.fillStyle = b.col; circle(c, bx, by + 3 * B, 22 * B); c.fill();
       const dk = b.col === C.loryBlue ? C.blueDeep : b.col === C.poppy ? '#B93A28' : '#C96A22';
       c.fillStyle = dk;
-      c.beginPath(); c.arc(bx, by + 3, 22, 0.15 * Math.PI, 0.85 * Math.PI); c.fill();
-      c.fillStyle = b.col; circle(c, bx, by, 21); c.fill();
-      c.fillStyle = C.paper; c.font = '800 20px ui-rounded, system-ui, sans-serif';
+      c.beginPath(); c.arc(bx, by + 3 * B, 22 * B, 0.15 * Math.PI, 0.85 * Math.PI); c.fill();
+      c.fillStyle = b.col; circle(c, bx, by, 21 * B); c.fill();
+      c.fillStyle = C.paper; c.font = `800 ${Math.round(20 * B)}px ui-rounded, system-ui, sans-serif`;
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillText(b.icon, bx, by + 1);
       c.restore();
-      btns.push({ id: b.id, x: bx, y: by, r: 28 });
+      btns.push({ id: b.id, x: bx, y: by, r: 28 * B });
     });
     return btns;
   }
 
-  // tray
-  function drawTray(c, tray, o, dragType) {
+  // tray. boost enlarges wells on small screens where the level's tray is
+  // small enough to still fit (the 19-well sandbox stays width-bound).
+  function drawTray(c, tray, o, dragType, boost) {
+    const B = boost || 1;
     const y0 = BOARD_H;
     c.save();
     c.fillStyle = C.woodLight;
@@ -1060,8 +1065,8 @@
     c.beginPath(); c.moveTo(0, y0 + 1); c.lineTo(BOARD_W, y0 + 1); c.stroke();
     const wells = [];
     const n = tray.length;
-    const wellW = Math.min(88, (BOARD_W - 30) / Math.max(n, 1));
-    const box = Math.min(68, wellW - 6);
+    const wellW = Math.min(88 * B, (BOARD_W - 30) / Math.max(n, 1));
+    const box = Math.min(68 * Math.min(B, 1.45), wellW - 6, TRAY_H - 8);
     const total = n * wellW;
     let x = BOARD_W / 2 - total / 2;
     c.font = '700 12px ui-rounded, system-ui, sans-serif';
@@ -1072,7 +1077,7 @@
       c.strokeStyle = 'rgba(67,52,43,0.15)'; c.lineWidth = 1.5; rr(c, cx - box / 2, cy - box / 2, box, box, 14); c.stroke();
       const defs = window.LoryCore.PART_DEFS[item.type];
       const dim = Math.max(defs.w || defs.r * 2, defs.h || defs.r * 2);
-      const sc = Math.min(0.62, (box - 16) / dim);
+      const sc = Math.min(0.62 * B, (box - 16) / dim);
       c.save();
       c.translate(cx, cy);
       c.scale(sc, sc);
@@ -1159,7 +1164,7 @@
 
     // selection
     let selButtons = null;
-    if (selection) selButtons = drawSelection(ctx, selection, o);
+    if (selection) selButtons = drawSelection(ctx, selection, o, frame.uiBoost);
 
     // drag ghost
     if (dragGhost) drawGhost(ctx, dragGhost, o, { invalid: dragGhost.invalid, lift: true });
@@ -1168,7 +1173,7 @@
 
     // tray
     let wells = null;
-    if (tray) wells = drawTray(ctx, tray, o, dragGhost && dragGhost.type);
+    if (tray) wells = drawTray(ctx, tray, o, dragGhost && dragGhost.type, frame.uiBoost);
 
     return { selButtons, wells };
   }
