@@ -188,8 +188,21 @@
 <script>
 // Offline support on the hosted site only (no-op for file:// and the
 // single-file artifact build, where there is no sw.js to fetch).
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(function () {});
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  // updateViaCache:'none' makes the browser re-check sw.js on every load
+  // instead of trusting its HTTP cache for up to a day
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+    .then(function (reg) { reg.update().catch(function () {}); })
+    .catch(function () {});
+  // when a NEW version replaces the one controlling this page, reload once so
+  // it applies immediately (guard: skip the initial claim on a first visit)
+  var swHadController = !!navigator.serviceWorker.controller;
+  var swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (!swHadController || swReloaded) return;
+    swReloaded = true;
+    location.reload();
+  });
 }
 </script>
 <script>
