@@ -28,6 +28,14 @@
     conveyor:    { w: 140, h: 26,  static: true,  placeable: true, dir: ['right', 'left'] },
     bumper:      { r: 26,          static: true,  placeable: true },
     magnet:      { w: 56,  h: 56,  static: true,  placeable: true },
+    // machine-shop parts (sandbox tray; fully simulated, campaign untouched)
+    rope:        { w: 28,  h: 18,  static: true,  placeable: true },  // anchor plate; tether hangs below
+    scissors:    { w: 74,  h: 40,  static: true,  placeable: true, rot: true },
+    candle:      { w: 26,  h: 58,  static: true,  placeable: true },
+    fuse:        { w: 130, h: 12,  static: true,  placeable: true, rot: true },
+    hydrant:     { w: 52,  h: 62,  static: true,  placeable: true, dir: ['right', 'left', 'up'] },
+    switch:      { w: 84,  h: 20,  static: true,  placeable: true },
+    fist:        { w: 66,  h: 46,  static: true,  placeable: true },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -49,6 +57,8 @@
     bucket: 'wood', conveyor: 'wood', trampoline: 'tramp', bumper: 'bumper',
     ball_beach: 'rubber', ball_marble: 'marble', berry: 'berry', magnet: 'magnet',
     balloon: 'balloon', balloon_goal: 'balloon', bell: 'bell', bowl: 'wood', spikes: 'wood',
+    rope: 'wood', scissors: 'magnet', candle: 'wood', fuse: 'wood',
+    hydrant: 'magnet', switch: 'wood', fist: 'bumper',
   };
 
   const FAN_REACH = 280;
@@ -57,6 +67,15 @@
   const MAGNET_REACH = 340;
   const MAGNET_ACTIVE_FRAMES = 120; // ~2s pull, then it "gets tired" and releases
   const MAGNET_COOLDOWN_FRAMES = 30;
+  const ROPE_LENGTH = 150;          // anchor to hanging point
+  const ROPE_SNAP = 70;             // grab radius around the rope end at sim start
+  const FUSE_BURN_FRAMES = 150;     // full fuse burns in ~2.5s
+  const FLAME_R = 22;               // ignition/pop radius around a flame point
+  const HYDRANT_REACH = 240;
+  const HYDRANT_HALF_WIDTH = 46;
+  const SWITCH_WIRE_REACH = 260;    // links to the nearest fan/conveyor/magnet
+  const FIST_LAUNCH = 15;           // punch speed straight up (px/frame)
+  const FIST_COOLDOWN = 60;
 
   let nextId = 1;
 
@@ -73,6 +92,37 @@
     if (dir === 'left') return { x: -1, y: 0 };
     if (dir === 'up') return { x: 0, y: -1 };
     return { x: 1, y: 0 };
+  }
+
+  // --- small geometry helpers for the machine-shop parts ---------------------
+  function toLocal(body, p) {
+    const c = Math.cos(-body.angle), s = Math.sin(-body.angle);
+    const dx = p.x - body.position.x, dy = p.y - body.position.y;
+    return { x: dx * c - dy * s, y: dx * s + dy * c };
+  }
+  function pointInOBB(body, p, hw, hh, pad) {
+    const l = toLocal(body, p);
+    return Math.abs(l.x) <= hw + (pad || 0) && Math.abs(l.y) <= hh + (pad || 0);
+  }
+  // segment vs oriented box (in the box's local frame, conservative sampling)
+  function segIntersectsOBB(a, b, body, hw, hh, pad) {
+    const steps = 12;
+    for (let i = 0; i <= steps; i++) {
+      const p = { x: a.x + (b.x - a.x) * i / steps, y: a.y + (b.y - a.y) * i / steps };
+      if (pointInOBB(body, p, hw, hh, pad)) return true;
+    }
+    return false;
+  }
+  function distPointSeg(p, a, b) {
+    const vx = b.x - a.x, vy = b.y - a.y;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / (vx * vx + vy * vy || 1)));
+    return Math.hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t));
+  }
+  // point on a fuse's long axis for parameter u in [0,1]
+  function fusePoint(body, len, u) {
+    const c = Math.cos(body.angle), s = Math.sin(body.angle);
+    const lx = (u - 0.5) * len;
+    return { x: body.position.x + lx * c, y: body.position.y + lx * s };
   }
 
   // Create the Matter body (or bodies) for one part instance.
@@ -119,6 +169,43 @@
         // metal marbles for MAGNET_ACTIVE_FRAMES before releasing them.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.2 }),
           { magnet: { active: false, timer: 0, cooldown: 0 } }));
+        break;
+
+      case 'rope':
+        // Anchor plate; at sim start the tether grabs the nearest dynamic body
+        // near the rope's hanging end (see createSim). Cut by scissors/flame.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.1 }),
+          { rope: { attached: null, cut: false, endY: y + ROPE_LENGTH } }));
+        break;
+
+      case 'scissors':
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.1 }),
+          { snips: 0 }));
+        break;
+
+      case 'candle':
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.1 }),
+          { candle: { lit: true } }));
+        break;
+
+      case 'fuse':
+        // Thin sensor strip: bodies pass through; only flames interact with it.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, isSensor: true, angle }),
+          { fuse: { active: false, ignited: false, dead: false, a: 0.5, b: 0.5, len: w } }));
+        break;
+
+      case 'hydrant':
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.2 })));
+        break;
+
+      case 'switch':
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.6, restitution: 0 }),
+          { sw: { pressed: 0, target: null } }));
+        break;
+
+      case 'fist':
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.1 }),
+          { fist: { cooldown: 0 } }));
         break;
 
       case 'domino':
@@ -260,6 +347,45 @@
 
     const dynamicBodies = () => Composite.allBodies(world).filter(b => !b.isStatic);
 
+    // --- machine-shop wiring (runs once, after all parts exist) --------------
+    // Ropes grab the nearest dynamic body near their hanging end.
+    for (const p of parts) {
+      if (p.spec.type !== 'rope') continue;
+      const anchor = p.bodies[0];
+      const m = lab(anchor);
+      const end = { x: anchor.position.x, y: anchor.position.y + ROPE_LENGTH };
+      let best = null, bd = ROPE_SNAP;
+      for (const b of dynamicBodies()) {
+        const d = Math.hypot(b.position.x - end.x, b.position.y - end.y);
+        if (d < bd) { bd = d; best = b; }
+      }
+      if (best) {
+        const c = Constraint.create({
+          pointA: { x: anchor.position.x, y: anchor.position.y + m.h / 2 },
+          bodyB: best, pointB: { x: 0, y: 0 },
+          length: ROPE_LENGTH - m.h / 2, stiffness: 0.9, damping: 0.05,
+        });
+        Composite.add(world, c);
+        m.rope.attached = best;
+        m.rope.constraint = c;
+      }
+    }
+    // Switches wire themselves to the nearest fan/conveyor/magnet.
+    for (const p of parts) {
+      if (p.spec.type !== 'switch') continue;
+      const swBody = p.bodies[0];
+      let best = null, bd = SWITCH_WIRE_REACH;
+      for (const q of parts) {
+        if (!['fan', 'conveyor', 'magnet'].includes(q.spec.type)) continue;
+        const d = Math.hypot(q.bodies[0].position.x - swBody.position.x, q.bodies[0].position.y - swBody.position.y);
+        if (d < bd) { bd = d; best = q; }
+      }
+      if (best) {
+        lab(swBody).sw.target = lab(best.bodies[0]).id;
+        lab(best.bodies[0]).switchControlled = true;
+      }
+    }
+
     // --- collision handling -------------------------------------------------
     function popBalloon(b) {
       const m = lab(b);
@@ -319,14 +445,26 @@
         }
 
         // Magnet activation: any decent bump wakes a sleeping magnet
-        // (and re-bumping an active one keeps it awake longer).
+        // (and re-bumping an active one keeps it awake longer). Switch-wired
+        // magnets ignore bumps — the switch decides.
         for (const [mg, o] of [[a, b], [b, a]]) {
           const mm = lab(mg).magnet;
-          if (mm && !o.isStatic && !o.isSensor && relSpeed >= 1.6 && mm.cooldown <= 0) {
+          if (mm && !lab(mg).switchControlled && !o.isStatic && !o.isSensor && relSpeed >= 1.6 && mm.cooldown <= 0) {
             const wasOff = !mm.active;
             mm.active = true;
             mm.timer = MAGNET_ACTIVE_FRAMES;
             if (wasOff) state.events.push({ type: 'magnet_on', x: mg.position.x, y: mg.position.y });
+          }
+        }
+
+        // Spring-loaded fist: punches whatever lands on it straight up.
+        for (const [fb, o] of [[a, b], [b, a]]) {
+          const fm = lab(fb).fist;
+          if (fm && !o.isStatic && !o.isSensor && fm.cooldown <= 0
+            && o.position.y < fb.position.y - 6 && relSpeed >= 1) {
+            fm.cooldown = FIST_COOLDOWN;
+            Body.setVelocity(o, { x: o.velocity.x, y: -FIST_LAUNCH });
+            state.events.push({ type: 'thwack', x: fb.position.x, y: fb.position.y - 24, bodyId: o.id, partId: lab(fb).id });
           }
         }
 
@@ -364,14 +502,67 @@
       }
     });
 
+    // --- machine-shop helpers -------------------------------------------------
+    const rectContains = (r, p) => p.x >= r.min.x && p.x <= r.max.x && p.y >= r.min.y && p.y <= r.max.y;
+    const flameTip = (body, h) => ({ x: body.position.x, y: body.position.y - h / 2 - 8 });
+    function ropeEnds(p) {
+      const anchor = p.bodies[0], m = lab(anchor);
+      if (!m.rope.attached) return null;
+      return [{ x: anchor.position.x, y: anchor.position.y + m.h / 2 }, m.rope.attached.position];
+    }
+    function cutRope(p, x, y, cause) {
+      const m = lab(p.bodies[0]);
+      if (m.rope.cut || !m.rope.attached) return;
+      m.rope.cut = true;
+      Composite.remove(world, m.rope.constraint);
+      m.rope.attached = null;
+      state.events.push({ type: 'snip', x, y, cause: cause || 'blade' });
+    }
+    function igniteFuse(fm, body, u) {
+      if (fm.dead) return;
+      if (!fm.ignited) {
+        fm.ignited = true; fm.active = true; fm.a = u; fm.b = u;
+        const pt = fusePoint(body, fm.len, u);
+        state.events.push({ type: 'ignite', x: pt.x, y: pt.y });
+      } else if (!fm.active && (u <= fm.a + 0.02 || u >= fm.b - 0.02)) {
+        fm.active = true; // re-lit at an unburnt tip after being doused
+        const pt = fusePoint(body, fm.len, u);
+        state.events.push({ type: 'ignite', x: pt.x, y: pt.y });
+      }
+    }
+
     // --- per-frame forces -----------------------------------------------------
     function applyBehaviours() {
       const all = Composite.allBodies(world);
+
+      // pressure switches first: devices read poweredNow below
+      const pressedTargets = {};
+      for (const p of parts) {
+        if (p.spec.type !== 'switch') continue;
+        const swb = p.bodies[0], m = lab(swb).sw;
+        let pressed = false;
+        for (const pair of engine.pairs.list) {
+          if (!pair.isActive) continue;
+          const other = pair.bodyA === swb ? pair.bodyB : pair.bodyB === swb ? pair.bodyA : null;
+          if (other && !other.isStatic && !other.isSensor && other.position.y < swb.position.y) { pressed = true; break; }
+        }
+        if (pressed !== !!m.pressedState) {
+          m.pressedState = pressed;
+          state.events.push({ type: pressed ? 'switch_on' : 'switch_off', x: swb.position.x, y: swb.position.y });
+        }
+        if (pressed && m.target) pressedTargets[m.target] = true;
+      }
+      for (const p of parts) {
+        const m0 = lab(p.bodies[0]);
+        if (m0.switchControlled) m0.poweredNow = !!pressedTargets[m0.id];
+      }
+
       for (const p of parts) {
         const spec = p.spec;
         if (spec.type === 'fan') {
           const fanBody = p.bodies[0];
           const m = lab(fanBody);
+          if (m.switchControlled && !m.poweredNow) continue;
           const dv = dirVector(m.dir);
           const fx = fanBody.position.x, fy = fanBody.position.y;
           const cx = fx + dv.x * (28 + FAN_REACH / 2);
@@ -392,10 +583,19 @@
         }
         if (spec.type === 'magnet') {
           const mg = p.bodies[0];
-          const mm = lab(mg).magnet;
+          const meta = lab(mg);
+          const mm = meta.magnet;
+          if (meta.switchControlled) {
+            // wired to a pressure switch: powered = pulling, no timer/cooldown
+            if (mm.active !== !!meta.poweredNow) {
+              mm.active = !!meta.poweredNow;
+              state.events.push({ type: mm.active ? 'magnet_on' : 'magnet_off', x: mg.position.x, y: mg.position.y });
+            }
+            mm.timer = 2;
+          }
           if (mm.cooldown > 0) mm.cooldown--;
           if (mm.active) {
-            mm.timer--;
+            if (!meta.switchControlled) mm.timer--;
             if (mm.timer <= 0) {
               mm.active = false;
               mm.cooldown = MAGNET_COOLDOWN_FRAMES;
@@ -433,13 +633,131 @@
         if (!pair.isActive) continue;
         const la = lab(pair.bodyA), lb = lab(pair.bodyB);
         for (const [belt, o] of [[la, pair.bodyB], [lb, pair.bodyA]]) {
-          if (belt && belt.type === 'conveyor' && !o.isStatic) {
+          if (belt && belt.type === 'conveyor' && !o.isStatic
+            && !(belt.switchControlled && !belt.poweredNow)) {
             const target = (belt.dir === 'left' ? -1 : 1) * CONVEYOR_SPEED;
             const dvx = target - o.velocity.x;
             Body.setVelocity(o, { x: o.velocity.x + Math.max(-0.4, Math.min(0.4, dvx)), y: o.velocity.y });
             Body.setAngularVelocity(o, o.angularVelocity * 0.9);
           }
         }
+      }
+
+      // --- machine shop: water, fire, blades, fists ---------------------------
+      // Hydrant jets: push EVERYTHING (water is strong — even berries, unlike
+      // fans) and douse any flame they reach.
+      for (const p of parts) {
+        if (p.spec.type !== 'hydrant') continue;
+        const hb = p.bodies[0], m = lab(hb);
+        const dv = dirVector(m.dir);
+        const hx = hb.position.x, hy = hb.position.y;
+        const cx = hx + dv.x * (30 + HYDRANT_REACH / 2), cy = hy + dv.y * (34 + HYDRANT_REACH / 2);
+        const hw = dv.x === 0 ? HYDRANT_HALF_WIDTH : HYDRANT_REACH / 2;
+        const hh = dv.x === 0 ? HYDRANT_REACH / 2 : HYDRANT_HALF_WIDTH;
+        const region = { min: { x: cx - hw, y: cy - hh }, max: { x: cx + hw, y: cy + hh } };
+        for (const b of Query.region(all, region)) {
+          if (b.isStatic || b.isSensor) continue;
+          const dist = Math.abs(dv.x !== 0 ? b.position.x - hx : b.position.y - hy);
+          const falloff = Math.max(0.4, 1 - dist / (HYDRANT_REACH + 40));
+          const heavy = b.density > 0.004;
+          const mag = (heavy ? 0.0011 : 0.0032) * Math.min(b.mass, 3) * falloff;
+          Body.applyForce(b, b.position, { x: dv.x * mag, y: dv.y * mag });
+        }
+        for (const q of parts) {
+          if (q.spec.type === 'candle') {
+            const cm = lab(q.bodies[0]).candle;
+            const tip = flameTip(q.bodies[0], lab(q.bodies[0]).h);
+            if (cm.lit && rectContains(region, tip)) {
+              cm.lit = false;
+              state.events.push({ type: 'extinguish', x: tip.x, y: tip.y });
+            }
+          } else if (q.spec.type === 'fuse') {
+            const fm = lab(q.bodies[0]).fuse;
+            if (!fm.active) continue;
+            for (const u of [fm.a > 0 ? fm.a : null, fm.b < 1 ? fm.b : null]) {
+              if (u == null) continue;
+              const pt = fusePoint(q.bodies[0], fm.len, u);
+              if (rectContains(region, pt)) {
+                fm.active = false;
+                state.events.push({ type: 'extinguish', x: pt.x, y: pt.y });
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Advance burning fuses (the burnt interval [a,b] grows both ways).
+      const burnRate = 1 / FUSE_BURN_FRAMES;
+      for (const p of parts) {
+        if (p.spec.type !== 'fuse') continue;
+        const fm = lab(p.bodies[0]).fuse;
+        if (!fm.active) continue;
+        fm.a = Math.max(0, fm.a - burnRate);
+        fm.b = Math.min(1, fm.b + burnRate);
+        if (fm.a <= 0 && fm.b >= 1) { fm.active = false; fm.dead = true; }
+      }
+
+      // Collect live flame points: lit candles + burning fuse fronts.
+      const flames = [];
+      for (const p of parts) {
+        if (p.spec.type === 'candle' && lab(p.bodies[0]).candle.lit) {
+          flames.push(flameTip(p.bodies[0], lab(p.bodies[0]).h));
+        } else if (p.spec.type === 'fuse') {
+          const fm = lab(p.bodies[0]).fuse;
+          if (!fm.active) continue;
+          if (fm.a > 0) flames.push(fusePoint(p.bodies[0], fm.len, fm.a));
+          if (fm.b < 1) flames.push(fusePoint(p.bodies[0], fm.len, fm.b));
+        }
+      }
+      // Flames act on the world: pop balloons, light fuses/candles, burn ropes.
+      for (const f of flames) {
+        for (const b of all) {
+          const mb = lab(b);
+          if (mb && mb.poppable && !mb.popped
+            && Math.hypot(b.position.x - f.x, b.position.y - f.y) < FLAME_R + (mb.r || 20)) popBalloon(b);
+        }
+        for (const q of parts) {
+          if (q.spec.type === 'fuse') {
+            const qb = q.bodies[0], fm = lab(qb).fuse;
+            if (fm.dead) continue;
+            const l = toLocal(qb, f);
+            if (Math.abs(l.y) <= lab(qb).h / 2 + 10 && Math.abs(l.x) <= fm.len / 2 + 6) {
+              igniteFuse(fm, qb, Math.max(0, Math.min(1, (l.x + fm.len / 2) / fm.len)));
+            }
+          } else if (q.spec.type === 'candle') {
+            const cm = lab(q.bodies[0]).candle;
+            const tip = flameTip(q.bodies[0], lab(q.bodies[0]).h);
+            if (!cm.lit && Math.hypot(tip.x - f.x, tip.y - f.y) < FLAME_R * 1.3) {
+              cm.lit = true;
+              state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
+            }
+          } else if (q.spec.type === 'rope') {
+            const ends = ropeEnds(q);
+            if (ends && distPointSeg(f, ends[0], ends[1]) < 14) cutRope(q, f.x, f.y, 'fire');
+          }
+        }
+      }
+
+      // Scissors cut any rope whose line crosses their blades.
+      for (const p of parts) {
+        if (p.spec.type !== 'scissors') continue;
+        const sb = p.bodies[0], sm = lab(sb);
+        for (const q of parts) {
+          if (q.spec.type !== 'rope') continue;
+          const ends = ropeEnds(q);
+          if (ends && segIntersectsOBB(ends[0], ends[1], sb, sm.w / 2, sm.h / 2, 2)) {
+            sm.snips = (sm.snips || 0) + 1;
+            cutRope(q, sb.position.x, sb.position.y, 'blade');
+          }
+        }
+      }
+
+      // Fist cooldown / punch animation timer.
+      for (const p of parts) {
+        if (p.spec.type !== 'fist') continue;
+        const fm = lab(p.bodies[0]).fist;
+        if (fm.cooldown > 0) fm.cooldown--;
       }
     }
 
@@ -458,6 +776,10 @@
     }
 
     function isQuiescent() {
+      // a burning fuse is pending action — never count the machine as stuck
+      for (const p of parts) {
+        if (p.spec.type === 'fuse' && lab(p.bodies[0]).fuse.active) return false;
+      }
       let maxV = 0;
       for (const b of dynamicBodies()) {
         maxV = Math.max(maxV, Math.hypot(b.velocity.x, b.velocity.y), Math.abs(b.angularVelocity) * 30);

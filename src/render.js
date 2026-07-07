@@ -33,6 +33,7 @@
   const JUICE_MIN_SPEED = 1.0;    // px/frame before trails/dust appear (slow
                                   // shelf rolls run at ~1.5 — keep them in)
   const BALL_TYPES = { berry: 1, ball_beach: 1, ball_marble: 1 };
+  const FIST_ANIM_T = 40; // cooldown frames above this = punch extension anim
 
   // ---------------------------------------------------------------------------
   // small helpers
@@ -556,6 +557,176 @@
 
     balloon_goal(c, d, a, o, body) { painters.balloon(c, d, a, o, body); },
 
+    // --- machine-shop parts ---------------------------------------------------
+    rope(c, d, a, o, body) {
+      // anchor plate; the rope line itself is drawn in drawPart's pre-pass
+      c.fillStyle = C.woodMid; rr(c, -d.w / 2, -d.h / 2, d.w, d.h, 5); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, -d.h / 2, d.w, d.h, 5); c.stroke();
+      c.fillStyle = C.inkSoft; circle(c, -d.w / 4, 0, 1.8); c.fill(); circle(c, d.w / 4, 0, 1.8); c.fill();
+      c.strokeStyle = C.woodDark; c.lineWidth = 3;
+      c.beginPath(); c.arc(0, d.h / 2 + 3, 5, 0, Math.PI); c.stroke(); // little hook
+    },
+
+    scissors(c, d, a, o, body) {
+      const snip = a && a.snipT > 0 ? Math.sin(a.snipT * 25) * 0.25 : 0.18;
+      c.fillStyle = C.sky;
+      for (const s of [-1, 1]) { // handles
+        c.save(); c.translate(-d.w / 2 + 12, s * 6); c.rotate(s * 0.35);
+        c.beginPath(); c.ellipse(0, 0, 11, 6.5, 0, 0, TAU); c.fill();
+        c.strokeStyle = C.blueDeep; c.lineWidth = 2;
+        c.beginPath(); c.ellipse(0, 0, 11, 6.5, 0, 0, TAU); c.stroke();
+        c.restore();
+      }
+      for (const s of [-1, 1]) { // blades
+        c.save(); c.translate(-4, 0); c.rotate(s * snip);
+        c.fillStyle = '#C9CDD4';
+        c.beginPath(); c.moveTo(0, s * 3); c.lineTo(d.w / 2 + 4, s * 1);
+        c.quadraticCurveTo(d.w / 2 + 8, 0, d.w / 2 + 4, s * -1.5);
+        c.lineTo(2, s * -2); c.closePath(); c.fill();
+        c.strokeStyle = C.outline; c.lineWidth = 1.5; c.stroke();
+        c.restore();
+      }
+      c.fillStyle = C.sunny; circle(c, -4, 0, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; circle(c, -4, 0, 4); c.stroke();
+    },
+
+    candle(c, d, a, o, body) {
+      const lit = body ? body.plugin.lab.candle.lit : true;
+      // holder
+      c.fillStyle = C.woodMid; rr(c, -d.w / 2 - 5, d.h / 2 - 8, d.w + 10, 8, 3); c.fill();
+      // wax
+      const g = c.createLinearGradient(-d.w / 2, 0, d.w / 2, 0);
+      g.addColorStop(0, C.paper); g.addColorStop(1, '#F1E4C8');
+      c.fillStyle = g; rr(c, -d.w / 2, -d.h / 2 + 12, d.w, d.h - 12, 5); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, -d.h / 2 + 12, d.w, d.h - 12, 5); c.stroke();
+      // drips
+      c.fillStyle = 'rgba(255,249,238,0.9)';
+      c.beginPath(); c.ellipse(-d.w / 4, -d.h / 2 + 16, 3, 6, 0, 0, TAU); c.fill();
+      // wick + flame
+      c.strokeStyle = C.ink; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(0, -d.h / 2 + 12); c.lineTo(0, -d.h / 2 + 5); c.stroke();
+      if (lit) {
+        const fl = Math.sin((o ? o.t : 0) * 11 + (d.seed || 0)) * 1.5;
+        const g2 = c.createRadialGradient(fl * 0.3, -d.h / 2 - 4, 1, fl * 0.3, -d.h / 2 - 4, 11);
+        g2.addColorStop(0, '#FFF3B0'); g2.addColorStop(0.55, C.sunny); g2.addColorStop(1, 'rgba(255,142,60,0)');
+        c.fillStyle = g2;
+        c.beginPath(); c.ellipse(fl * 0.4, -d.h / 2 - 4, 6 + fl * 0.4, 10, fl * 0.05, 0, TAU); c.fill();
+        c.fillStyle = C.tangerine;
+        c.beginPath(); c.ellipse(fl * 0.3, -d.h / 2 - 2, 2.6, 4.5, 0, 0, TAU); c.fill();
+      } else {
+        c.strokeStyle = 'rgba(140,122,107,0.6)'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(0, -d.h / 2 + 4);
+        c.quadraticCurveTo(4, -d.h / 2 - 4, 1, -d.h / 2 - 10); c.stroke(); // smoke wisp
+      }
+    },
+
+    fuse(c, d, a, o, body) {
+      const fm = body ? body.plugin.lab.fuse : { a: 0.5, b: 0.5, ignited: false, active: false };
+      const len = d.w;
+      // braided cord: draw unburnt segments only
+      const seg = (u0, u1, col, lw) => {
+        if (u1 - u0 < 0.01) return;
+        c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
+        c.beginPath();
+        for (let i = 0; i <= 16; i++) {
+          const u = u0 + (u1 - u0) * i / 16;
+          const x = (u - 0.5) * len;
+          const y = Math.sin(u * 26) * 2.2;
+          i ? c.lineTo(x, y) : c.moveTo(x, y);
+        }
+        c.stroke();
+      };
+      if (!fm.ignited) {
+        seg(0, 1, C.woodDark, 5); seg(0, 1, C.tangerine, 2);
+      } else {
+        seg(0, fm.a, C.woodDark, 5); seg(0, fm.a, C.tangerine, 2);
+        seg(fm.b, 1, C.woodDark, 5); seg(fm.b, 1, C.tangerine, 2);
+        // char stubs at the burnt boundary
+        c.fillStyle = 'rgba(67,52,43,0.55)';
+        for (const u of [fm.a > 0 ? fm.a : null, fm.b < 1 ? fm.b : null]) {
+          if (u == null) continue;
+          circle(c, (u - 0.5) * len, Math.sin(u * 26) * 2.2, 3); c.fill();
+        }
+        // glowing sparks on active fronts
+        if (fm.active) {
+          for (const u of [fm.a > 0 ? fm.a : null, fm.b < 1 ? fm.b : null]) {
+            if (u == null) continue;
+            const x = (u - 0.5) * len, y = Math.sin(u * 26) * 2.2;
+            const tw = 0.7 + 0.3 * Math.sin((o ? o.t : 0) * 30 + u * 60);
+            c.fillStyle = `rgba(255,197,61,${tw})`; star4(c, x, y, 7, (o ? o.t : 0) * 6); c.fill();
+            c.fillStyle = '#FFF3B0'; circle(c, x, y, 2.4); c.fill();
+          }
+        }
+      }
+    },
+
+    hydrant(c, d, a, o, body) {
+      const dir = d.dir || 'right';
+      c.save();
+      if (dir === 'left') c.scale(-1, 1);
+      // body
+      c.fillStyle = C.poppy;
+      rr(c, -d.w / 2 + 6, -d.h / 2 + 8, d.w - 12, d.h - 12, 9); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2 + 6, -d.h / 2 + 8, d.w - 12, d.h - 12, 9); c.stroke();
+      // dome + base
+      c.fillStyle = C.poppy;
+      c.beginPath(); c.arc(0, -d.h / 2 + 9, 12, Math.PI, 0); c.fill();
+      c.strokeStyle = C.outline; c.beginPath(); c.arc(0, -d.h / 2 + 9, 12, Math.PI, 0); c.stroke();
+      c.fillStyle = C.sunny; circle(c, 0, -d.h / 2 + 4, 3.5); c.fill();
+      c.fillStyle = C.woodMid; rr(c, -d.w / 2, d.h / 2 - 7, d.w, 7, 3); c.fill();
+      // side bolts
+      c.fillStyle = '#B93A28'; circle(c, -d.w / 2 + 12, 2, 3); c.fill(); circle(c, d.w / 2 - 12, 2, 3); c.fill();
+      // nozzle (points along dir; for 'up' rotate the whole nozzle)
+      c.save();
+      if (dir === 'up') { c.rotate(-Math.PI / 2); c.translate(d.h / 2 - 20, 0); }
+      c.fillStyle = '#B93A28'; rr(c, d.w / 2 - 8, -7, 14, 14, 4); c.fill();
+      c.fillStyle = C.sky; rr(c, d.w / 2 + 4, -5, 6, 10, 2); c.fill();
+      c.restore();
+      c.restore();
+    },
+
+    switch(c, d, a, o, body) {
+      const pressed = body && body.plugin.lab.sw.pressedState;
+      // base
+      c.fillStyle = C.woodMid; rr(c, -d.w / 2, 0, d.w, d.h / 2, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, 0, d.w, d.h / 2, 4); c.stroke();
+      // plate (sinks when pressed)
+      const py = pressed ? 2 : -4;
+      c.fillStyle = pressed ? C.leaf : C.tangerine;
+      rr(c, -d.w / 2 + 6, py - 6, d.w - 12, 8, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -d.w / 2 + 6, py - 6, d.w - 12, 8, 4); c.stroke();
+      // indicator dot
+      c.fillStyle = pressed ? C.leaf : 'rgba(95,179,88,0.35)';
+      circle(c, d.w / 2 - 8, d.h / 2 - 5, 2.5); c.fill();
+    },
+
+    fist(c, d, a, o, body) {
+      const fm = body ? body.plugin.lab.fist : { cooldown: 0 };
+      const punch = fm.cooldown > FIST_ANIM_T ? (fm.cooldown - FIST_ANIM_T) / (60 - FIST_ANIM_T) : 0;
+      const lift = punch * 26; // glove extends upward right after firing
+      // box base
+      c.fillStyle = C.woodLight; rr(c, -d.w / 2, 0, d.w, d.h / 2, 5); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, 0, d.w, d.h / 2, 5); c.stroke();
+      c.fillStyle = C.sunny; star4(c, 0, d.h / 4, 6, 0.2); c.fill();
+      // spring
+      c.strokeStyle = C.inkSoft; c.lineWidth = 2.5;
+      c.beginPath();
+      const top = -6 - lift;
+      for (let i = 0; i <= 6; i++) {
+        const yy = 0 + (top - 0) * i / 6;
+        c.lineTo(i % 2 ? 10 : -10, yy);
+      }
+      c.stroke();
+      // boxing glove
+      c.fillStyle = C.poppy;
+      c.beginPath(); c.ellipse(0, top - 9, 16, 12, 0, 0, TAU); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2;
+      c.beginPath(); c.ellipse(0, top - 9, 16, 12, 0, 0, TAU); c.stroke();
+      c.fillStyle = '#B93A28'; rr(c, -7, top - 2, 14, 6, 3); c.fill();
+      c.fillStyle = 'rgba(255,249,238,0.7)';
+      c.beginPath(); c.ellipse(-6, top - 13, 4, 2.5, -0.5, 0, TAU); c.fill();
+    },
+
     sparkle(c, d, a, o) {
       const t = o ? o.t : 0;
       const tw = 0.75 + 0.25 * Math.sin(t * TAU / 0.9 + (d.seed || 0));
@@ -718,6 +889,10 @@
         p.vx *= Math.pow(0.99, k);
       } else if (p.kind === 'wind') {
         p.x += p.vx * k; p.y += p.vy * k;
+      } else if (p.kind === 'drop') {
+        p.vy += 16 * dt; p.x += p.vx * k; p.y += p.vy * k;
+      } else if (p.kind === 'flamep') {
+        p.x += p.vx * k; p.y += p.vy * k; p.r *= Math.pow(0.96, k);
       } else {
         p.x += (p.vx || 0) * k; p.y += (p.vy || 0) * k;
         if (p.kind === 'star' || p.kind === 'shard') p.vy += 8 * dt;
@@ -749,6 +924,16 @@
       } else if (p.kind === 'wind') {
         c.strokeStyle = 'rgba(255,249,238,0.6)'; c.lineWidth = 2;
         c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x - p.vx * 3, p.y - p.vy * 3); c.stroke();
+      } else if (p.kind === 'drop') {
+        c.fillStyle = 'rgba(124,199,232,0.85)';
+        circle(c, p.x, p.y, p.r); c.fill();
+        c.fillStyle = 'rgba(255,249,238,0.6)';
+        circle(c, p.x - p.r * 0.3, p.y - p.r * 0.3, p.r * 0.35); c.fill();
+      } else if (p.kind === 'flamep') {
+        c.fillStyle = `rgba(255,142,60,${0.75 * k})`;
+        circle(c, p.x, p.y, p.r); c.fill();
+        c.fillStyle = `rgba(255,243,176,${0.8 * k})`;
+        circle(c, p.x, p.y + 1, p.r * 0.45); c.fill();
       }
       c.restore();
     }
@@ -782,10 +967,37 @@
         case 'sparkle': fx.stars(e.x, e.y, 6); fx.ring(e.x, e.y, C.sunny); break;
         case 'magnet_on': fx.ring(e.x, e.y, C.sky); break;
         case 'magnet_off': fx.poof(e.x, e.y, 4); break;
+        case 'snip':
+          if (e.cause === 'fire') { fx.poof(e.x, e.y, 4); for (let i = 0; i < 5; i++) spawn({ kind: 'flamep', x: e.x, y: e.y, vx: (Math.random() - 0.5) * 3, vy: -1 - Math.random() * 2, life: 0.45, t: 0, r: 3 }); }
+          else { fx.stars(e.x, e.y, 4); fx.ring(e.x, e.y, C.paper); }
+          markSnip(e, sim);
+          break;
+        case 'ignite':
+          for (let i = 0; i < 7; i++) spawn({ kind: 'flamep', x: e.x, y: e.y, vx: (Math.random() - 0.5) * 3, vy: -1 - Math.random() * 2.5, life: 0.5, t: 0, r: 3.2 });
+          break;
+        case 'extinguish':
+          fx.poof(e.x, e.y, 6);
+          for (let i = 0; i < 4; i++) spawn({ kind: 'drop', x: e.x + (Math.random() - 0.5) * 14, y: e.y, vx: (Math.random() - 0.5) * 3, vy: -2, life: 0.5, t: 0, r: 2.5 });
+          break;
+        case 'switch_on': fx.ring(e.x, e.y, C.leaf); break;
+        case 'switch_off': fx.ring(e.x, e.y, C.inkSoft); break;
+        case 'thwack':
+          fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 5); fx.poof(e.x, e.y + 10, 4);
+          if (e.bodyId != null) squash.set(e.bodyId, { t: 0, nx: 0, ny: 1, amt: 0.3 });
+          break;
         case 'win': shakeT = 0; break;
       }
     }
   }
+  function markSnip(e, sim) {
+    if (!sim) return;
+    for (const p of sim.parts) {
+      if (p.spec.type !== 'scissors') continue;
+      const b = p.bodies[0];
+      if (Math.hypot(b.position.x - e.x, b.position.y - e.y) < 60) partAnim(b.plugin.lab.id).snipT = 0.45;
+    }
+  }
+
   function ringBell(e, sim) {
     if (!sim) return;
     for (const p of sim.parts) {
@@ -858,7 +1070,8 @@
       const a = partAnim(id);
       const type = p.spec.type;
       if (type === 'fan') {
-        a.spin += (running ? 9.4 : 0.9) * dt * TAU / 2;
+        const off = p.bodies[0].plugin.lab.switchControlled && !p.bodies[0].plugin.lab.poweredNow;
+        a.spin += ((running && !off) ? 9.4 : 0.9) * dt * TAU / 2;
       }
       if (type === 'conveyor') a.dash += (running ? 3.2 : 0) * 60 * dt;
       if (type === 'trampoline') {
@@ -877,6 +1090,7 @@
         const m = p.bodies[0].plugin.lab.magnet;
         a.magnetLerp = clamp(a.magnetLerp + (m.active ? dt * 5 : -dt * 3), 0, 1);
       }
+      if (type === 'scissors' && a.snipT > 0) a.snipT = Math.max(0, a.snipT - dt);
     }
     for (const [id, s] of squash) { s.t += dt; if (s.t > 0.18) squash.delete(id); }
   }
@@ -891,6 +1105,24 @@
     // seesaw base behind the plank, at the constraint anchor
     if (type === 'seesaw') {
       c.save(); c.translate(spec.x, spec.y); painters.seesawBase(c); c.restore();
+    }
+    // rope line: braided cord from the anchor hook to the hanging body
+    if (type === 'rope' && m.rope && m.rope.attached && !m.rope.cut) {
+      const ax = body.position.x, ay = body.position.y + m.h / 2 + 3;
+      const bx2 = m.rope.attached.position.x, by2 = m.rope.attached.position.y;
+      c.save();
+      for (const [col, lw] of [[C.woodDark, 4.5], [C.tangerine, 1.8]]) {
+        c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
+        c.beginPath();
+        for (let i = 0; i <= 14; i++) {
+          const u = i / 14;
+          const x = ax + (bx2 - ax) * u + Math.sin(u * 22) * 1.6;
+          const y = ay + (by2 - ay) * u;
+          i ? c.lineTo(x, y) : c.moveTo(x, y);
+        }
+        c.stroke();
+      }
+      c.restore();
     }
     // balloon strings
     if ((type === 'balloon' || type === 'balloon_goal')) {
@@ -963,13 +1195,78 @@
     return spec.r || (defs[spec.type] && defs[spec.type].r);
   }
 
+  // wires from pressure switches to the device they power
+  function drawWires(c, sim, o) {
+    const byId = {};
+    for (const p of sim.parts) byId[p.bodies[0].plugin.lab.id] = p;
+    for (const p of sim.parts) {
+      if (p.spec.type !== 'switch') continue;
+      const m = p.bodies[0].plugin.lab.sw;
+      if (!m.target || !byId[m.target]) continue;
+      const a = p.bodies[0].position, b = byId[m.target].bodies[0].position;
+      c.save();
+      c.strokeStyle = m.pressedState ? C.leaf : C.inkSoft;
+      c.lineWidth = 2.5;
+      c.setLineDash(m.pressedState ? [] : [6, 5]);
+      if (m.pressedState) c.lineDashOffset = 0;
+      const sag = 26 + Math.abs(b.x - a.x) * 0.08;
+      c.beginPath();
+      c.moveTo(a.x, a.y + 8);
+      c.quadraticCurveTo((a.x + b.x) / 2, Math.max(a.y, b.y) + sag, b.x, b.y + 12);
+      c.stroke();
+      c.setLineDash([]);
+      // plug dots
+      c.fillStyle = m.pressedState ? C.leaf : C.inkSoft;
+      circle(c, a.x, a.y + 8, 3); c.fill(); circle(c, b.x, b.y + 12, 3); c.fill();
+      c.restore();
+    }
+  }
+
+  // ambient machine FX: water droplets along hydrant jets, flame flickers
+  let ambT = 0;
+  function stepMachineFx(sim, dt, running) {
+    ambT += dt;
+    if (!running) return;
+    for (const p of sim.parts) {
+      const body = p.bodies[0], m = body.plugin.lab;
+      if (p.spec.type === 'hydrant') {
+        const dv = m.dir === 'left' ? { x: -1, y: 0 } : m.dir === 'up' ? { x: 0, y: -1 } : { x: 1, y: 0 };
+        for (let i = 0; i < 2; i++) {
+          const off = (Math.sin(ambT * 13 + i * 3 + body.id) + 1) / 2;
+          spawn({
+            kind: 'drop',
+            x: body.position.x + dv.x * (30 + off * 4), y: body.position.y - (m.dir === 'up' ? 34 : -2) + (dv.x !== 0 ? -6 + off * 10 : 0),
+            vx: dv.x * (5 + off * 2.5) + (Math.sin(ambT * 31 + i) * 0.6), vy: dv.y * (5 + off * 2.5) + (dv.x !== 0 ? -0.4 : 0),
+            life: 0.55, t: 0, r: 2 + off * 2,
+          });
+        }
+      } else if (p.spec.type === 'candle' && m.candle.lit && Math.random() < 0) {
+        // (flame is drawn by the painter; occasional ember handled on events)
+      } else if (p.spec.type === 'fuse' && m.fuse.active) {
+        const fm = m.fuse;
+        for (const u of [fm.a > 0 ? fm.a : null, fm.b < 1 ? fm.b : null]) {
+          if (u == null) continue;
+          const cs = Math.cos(body.angle), sn = Math.sin(body.angle);
+          const lx = (u - 0.5) * fm.len;
+          spawn({
+            kind: 'flamep',
+            x: body.position.x + lx * cs, y: body.position.y + lx * sn,
+            vx: (Math.sin(ambT * 40 + u * 9) * 0.7), vy: -1.4,
+            life: 0.4, t: 0, r: 2.5,
+          });
+        }
+      }
+    }
+  }
+
   function drawWindZones(c, sim, o, faint) {
     for (const p of sim.parts) {
       if (p.spec.type !== 'fan') continue;
       const b = p.bodies[0], m = b.plugin.lab;
+      const off = m.switchControlled && !m.poweredNow; // wired but unpowered
       const dv = m.dir === 'left' ? { x: -1, y: 0 } : m.dir === 'up' ? { x: 0, y: -1 } : { x: 1, y: 0 };
       c.save();
-      c.globalAlpha = faint ? 0.25 : 0.55;
+      c.globalAlpha = faint || off ? 0.18 : 0.55;
       c.strokeStyle = C.paper; c.lineWidth = 2; c.setLineDash([10, 8]);
       c.lineDashOffset = -(o.t * 120 % 18);
       for (const off of [-26, 0, 26]) {
@@ -1173,6 +1470,8 @@
     }
 
     drawWindZones(ctx, sim, o, !running);
+    drawWires(ctx, sim, o);
+    stepMachineFx(sim, dt, running);
     drawTrails(ctx, sim);
 
     // parts: statics first, dynamics on top, sensors (sparkles) last

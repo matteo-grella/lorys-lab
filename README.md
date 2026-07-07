@@ -24,7 +24,12 @@ self-contained file.
   bells, goal balloons, and a friendly cactus as level furniture.
 - **The sleepy magnet**: bumps wake it, it pulls metal marbles for two seconds,
   then it gets tired and drops them — enabling two-stage crane puzzles.
-- **Sandbox mode** with every part, for free building.
+- **Sandbox mode** with every part, for free building — including the
+  machine shop: ropes (cuttable), scissors, candles, fuses that burn with a
+  real flame front, directional fire hydrants (water pushes what wind can't,
+  and douses flames), pressure switches that power fans/belts/magnets through
+  a visible wire, and a spring-loaded boxing fist. Every behavior and
+  interaction is proven by the headless physics suite.
 - **Puzzle maker**: build a scene in the sandbox, press 🧩, tap the parts the
   player should place (they fade into the future tray), press 💾 and name it.
   Saved puzzles persist and appear under "My puzzles" in the level select,

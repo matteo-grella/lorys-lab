@@ -226,6 +226,155 @@ function run(level, placements, seconds = 12, watch = null) {
     marble.position.x > 600 && marble.position.y > 560, `final=(${marble.position.x.toFixed(0)},${marble.position.y.toFixed(0)})`);
 }
 
+// ---------------------------------------------------------------------------
+// machine-shop parts (sandbox): rope/scissors/candle/fuse/hydrant/switch/fist
+// ---------------------------------------------------------------------------
+
+// 16. Rope ties the nearest ball and holds it; scissors cut it down.
+{
+  const level = {
+    goalType: 'catch',
+    fixed: [
+      { type: 'rope', x: 500, y: 200 },
+      { type: 'berry', x: 505, y: 355 },       // near rope end (200+150)
+      { type: 'bowl', x: 500, y: 655 },
+    ],
+  };
+  const hold = Core.simulate(level, [], { maxSeconds: 8 });
+  check('rope ties nearby berry and holds it (no win, settles)', !hold.won && hold.settled);
+  const cut = Core.simulate(level, [{ type: 'scissors', x: 500, y: 280 }], { maxSeconds: 10, collectEvents: true });
+  check('scissors cut the rope -> berry falls into bowl',
+    cut.won && cut.events.some(e => e.type === 'snip'), `t=${cut.seconds}s`);
+}
+
+// 17. Candle lights a fuse; the burning front pops a goal balloon later
+//     (fuse as a delay line), and the delay is real.
+{
+  const level = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'candle', x: 390, y: 400 },
+      { type: 'balloon_goal', x: 540, y: 360 },
+    ],
+  };
+  const noFuse = Core.simulate(level, [], { maxSeconds: 6 });
+  check('candle alone cannot reach the balloon', !noFuse.won);
+  const r = Core.simulate(level, [{ type: 'fuse', x: 440, y: 366 }], { maxSeconds: 10, collectEvents: true });
+  check('candle lights fuse; burning front pops balloon after a delay',
+    r.won && r.seconds > 0.8 && r.events.some(e => e.type === 'ignite'), `t=${r.seconds}s`);
+}
+
+// 18. Fuse chain: fire crosses from one fuse to another.
+{
+  const level = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'candle', x: 360, y: 400 },
+      { type: 'balloon_goal', x: 640, y: 360 },
+    ],
+  };
+  const oneFuse = Core.simulate(level, [{ type: 'fuse', x: 420, y: 366 }], { maxSeconds: 10 });
+  check('single fuse too short to reach far balloon', !oneFuse.won);
+  const r = Core.simulate(level, [
+    { type: 'fuse', x: 420, y: 366 },
+    { type: 'fuse', x: 540, y: 366 },
+  ], { maxSeconds: 12 });
+  check('two chained fuses carry the flame to the balloon', r.won, `t=${r.seconds}s`);
+}
+
+// 19. Hydrant pushes a BERRY (water is stronger than wind — fans never can).
+{
+  const level = {
+    goalType: 'catch',
+    fixed: [
+      { type: 'shelf', x: 500, y: 500, w: 360, h: 24 },
+      { type: 'berry', x: 420, y: 471 },
+      { type: 'bowl', x: 760, y: 655 },
+    ],
+  };
+  const fan = Core.simulate(level, [{ type: 'fan', x: 300, y: 470, dir: 'right' }], { maxSeconds: 8 });
+  check('fan cannot move the berry (teaching rule intact)', !fan.won);
+  const jet = Core.simulate(level, [{ type: 'hydrant', x: 300, y: 468, dir: 'right' }], { maxSeconds: 10 });
+  check('hydrant water jet pushes the berry off the shelf into the bowl', jet.won, `t=${jet.seconds}s`);
+}
+
+// 20. Hydrant extinguishes a burning fuse -> balloon at the end survives.
+{
+  const level = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'candle', x: 420, y: 400 },
+      { type: 'fuse', x: 470, y: 366 },
+      { type: 'balloon_goal', x: 566, y: 360 },
+      { type: 'hydrant', x: 470, y: 250, dir: 'up' },
+    ],
+  };
+  // hydrant points up, away from the fuse: balloon pops
+  const r1 = Core.simulate(level, [], { maxSeconds: 10 });
+  check('control: flame survives when water points away', r1.won);
+  // hydrant re-aimed down over the fuse: flame doused, balloon survives
+  const level2 = JSON.parse(JSON.stringify(level));
+  level2.fixed[3] = { type: 'hydrant', x: 470, y: 250, dir: 'right' };
+  level2.fixed.push({ type: 'hydrant', x: 240, y: 366, dir: 'right' });
+  const r2 = Core.simulate(level2, [], { maxSeconds: 10, collectEvents: true });
+  check('water dousing the fuse front stops the fire (balloon survives)',
+    !r2.won && r2.events.some(e => e.type === 'extinguish'), `settled=${r2.settled}`);
+}
+
+// 21. Switch powers a fan only while something presses the plate.
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'shelf', x: 500, y: 500, w: 400, h: 24 },
+      { type: 'ball_beach', x: 420, y: 459 },
+      { type: 'bell', x: 700, y: 460 },
+      { type: 'fan', x: 320, y: 460, dir: 'right' },
+      { type: 'switch', x: 220, y: 590 },
+      { type: 'shelf', x: 220, y: 610, w: 120, h: 16 },
+    ],
+  };
+  const idle = Core.simulate(level, [], { maxSeconds: 6 });
+  check('switch-wired fan stays OFF with nothing on the plate', !idle.won && idle.settled);
+  const r = Core.simulate(level, [{ type: 'ball_marble', x: 220, y: 480 }], { maxSeconds: 10, collectEvents: true });
+  check('marble lands on switch -> fan powers on -> ball rings bell',
+    r.won && r.events.some(e => e.type === 'switch_on'), `t=${r.seconds}s`);
+}
+
+// 22. Spring fist launches a landing marble far higher than any trampoline.
+{
+  const mk = (part) => ({
+    goalType: 'catch',
+    fixed: [{ type: 'ball_marble', x: 400, y: 400 }, { type: 'bowl', x: 1100, y: 655 }],
+  });
+  const runPeak = (placements) => {
+    const sim = Core.createSim(mk(), placements);
+    const b = sim.bodies().find(x => x.plugin?.lab?.type === 'ball_marble');
+    let minY = 400;
+    for (let f = 0; f < 300; f++) { sim.step(); minY = Math.min(minY, b.position.y); }
+    return minY;
+  };
+  const tramp = runPeak([{ type: 'trampoline', x: 400, y: 600 }]);
+  const fist = runPeak([{ type: 'fist', x: 400, y: 600 }]);
+  check('fist launches marble far above trampoline rebound height',
+    fist < tramp - 120 && fist < 200, `fist peak y=${fist.toFixed(0)} vs trampoline ${tramp.toFixed(0)}`);
+}
+
+// 23. Flame burns a rope: candle under the rope line drops the hanging ball.
+{
+  const level = {
+    goalType: 'catch',
+    fixed: [
+      { type: 'rope', x: 500, y: 150 },
+      { type: 'berry', x: 503, y: 305 },
+      { type: 'bowl', x: 500, y: 655 },
+    ],
+  };
+  const r = Core.simulate(level, [{ type: 'candle', x: 505, y: 255 }], { maxSeconds: 10, collectEvents: true });
+  check('candle flame burns through the rope -> berry drops into bowl',
+    r.won && r.events.some(e => e.type === 'snip' && e.cause === 'fire'), `t=${r.seconds}s`);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

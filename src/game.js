@@ -96,6 +96,7 @@
   const SANDBOX_TRAY = [
     ['plank', 8], ['shelf', 4], ['wall', 2], ['trampoline', 3], ['seesaw', 2], ['fan', 3],
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
+    ['rope', 3], ['scissors', 2], ['candle', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
     ['balloon_goal', 4], ['spikes', 2],
   ];
@@ -649,6 +650,7 @@
     for (const p of S.placements.concat(currentLevel().fixed || [])) {
       if (p.type === 'fan') A.startLoop('fan');
       if (p.type === 'conveyor') A.startLoop('conveyor');
+      if (p.type === 'hydrant') A.startLoop('water');
     }
   }
 

@@ -248,6 +248,41 @@
       b.o.frequency.exponentialRampToValueAtTime(900 * r, t + 0.06);
       shot(b.o, t + 0.09, b.nodes.concat(noiseHit(t, 0.005, 'highpass', 3000, null, 0.08)));
     },
+    snip: function (t) { // scissors: two quick metallic clicks
+      for (var i = 0; i < 2; i++) {
+        var tt = t + i * 0.07;
+        var b = tone(tt, 'sine', 2400 + i * 500, 0.035, 0.22, 0.001, rnd(-25, 25));
+        shot(b.o, tt + 0.05, b.nodes.concat(noiseHit(tt, 0.012, 'bandpass', 5000, 7, 0.18)));
+      }
+    },
+    thwack: function (t) { // spring fist: deep punch + spring twang
+      var body = tone(t, 'sine', 130, 0.09, 0.5, 0.001, rnd(-20, 20));
+      body.o.frequency.exponentialRampToValueAtTime(60, t + 0.08);
+      var tw = tone(t + 0.02, 'triangle', 620, 0.18, 0.18, 0.002, rnd(-30, 30));
+      tw.o.frequency.exponentialRampToValueAtTime(280, t + 0.2);
+      shot(body.o, t + 0.12, body.nodes.concat(noiseHit(t, 0.02, 'lowpass', 900, null, 0.4)));
+      shot(tw.o, t + 0.22, tw.nodes);
+    },
+    switchOn: function (t) { // pressure plate down: firm click + rising blip
+      var b = tone(t, 'sine', 500, 0.05, 0.3, 0.001);
+      b.o.frequency.linearRampToValueAtTime(760, t + 0.04);
+      shot(b.o, t + 0.06, b.nodes.concat(noiseHit(t, 0.008, 'bandpass', 2500, 4, 0.15)));
+    },
+    switchOff: function (t) { // plate up: softer falling blip
+      var b = tone(t, 'sine', 640, 0.05, 0.2, 0.001);
+      b.o.frequency.linearRampToValueAtTime(420, t + 0.045);
+      shot(b.o, t + 0.06, b.nodes);
+    },
+    igniteFizz: function (t) { // fuse/candle catches: short sizzle + spark ping
+      var n = noiseHit(t, 0.16, 'bandpass', 4200, 2.5, 0.22);
+      var b = tone(t + 0.02, 'sine', 1800, 0.04, 0.12, 0.001, rnd(-40, 40));
+      shot(b.o, t + 0.07, b.nodes.concat(n));
+    },
+    extinguishHiss: function (t) { // water meets flame: steam psshh
+      var n = noiseHit(t, 0.3, 'bandpass', 2200, 1.2, 0.3);
+      var n2 = noiseHit(t + 0.05, 0.22, 'highpass', 4500, null, 0.12);
+      void n; void n2;
+    },
     clank: function (t, v) { // magnet metal CLANK (hit with impact > 3)
       var body = tone(t, 'sine', 1900, 0.06, 0.35 * v, 0.001, rnd(-15, 15));
       shot(body.o, t + 0.09, body.nodes.concat(noiseHit(t, 0.025, 'bandpass', 3500, 6, 0.3 * v)));
@@ -369,7 +404,22 @@
     return { osc: o, bp: bp, stop: function () { endLoop(level, 0.08, [o, ls[0], ls[2]], nodes); } };
   }
 
-  var LOOP_MAKERS = { fan: makeFan, conveyor: makeConveyor, magnet: makeMagnet, balloon: makeBalloon };
+  function makeWater() { // hydrant jet: filtered noise splash with slow burble LFO
+    var t = ctx.currentTime;
+    var n = noise(true), bp = filt('bandpass', 900, 0.8), lp = filt('lowpass', 2600);
+    var amp = gainNode(0.85), level = gainNode(0);
+    var burble = lfoTo(t, 'sine', 2.3, 0.15, amp.gain, 0)
+      .concat(lfoTo(t, 'sine', 0.7, 300, bp.frequency, 0));
+    sweep(level.gain, t, 0.0001, t + 0.2, 0.14, false);
+    chain(n, bp, lp, amp, level, sfxBus); n.start(t);
+    var nodes = [n, bp, lp, amp, level].concat(burble);
+    return {
+      setCount: function (c) { level.gain.setTargetAtTime(0.14 * Math.min(2, Math.sqrt(c)), ctx.currentTime, 0.05); },
+      stop: function () { endLoop(level, 0.25, [n, burble[0], burble[2]], nodes); },
+    };
+  }
+
+  var LOOP_MAKERS = { fan: makeFan, conveyor: makeConveyor, magnet: makeMagnet, balloon: makeBalloon, water: makeWater };
   function startLoop(name) {
     if (!ctx || !sfxOn || !LOOP_MAKERS[name]) return;
     var L = loops[name];
@@ -507,6 +557,12 @@
         case 'win': sfx('win'); break;
         case 'magnet_on': sfx('magnetClunk'); startLoop('magnet'); break;
         case 'magnet_off': stopLoop('magnet'); sfx('magnetWind'); break;
+        case 'snip': sfx('snip'); break;
+        case 'thwack': sfx('thwack'); break;
+        case 'switch_on': sfx('switchOn'); break;
+        case 'switch_off': sfx('switchOff'); break;
+        case 'ignite': sfx('igniteFizz'); break;
+        case 'extinguish': sfx('extinguishHiss'); break;
       }
     }
   }

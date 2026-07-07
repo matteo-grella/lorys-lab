@@ -191,6 +191,13 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `bucket` | 120×90 | ✓ | ✓ | – | – | compound: solid open-top catcher |
 | `ball_beach` | r 28 | dynamic | ✓ | – | – | light + bouncy |
 | `ball_marble` | r 18 | dynamic | ✓ | – | – | heavy; the only magnet-attractable body |
+| `rope` | 28×18 anchor | ✓ | ✓ (sandbox) | – | – | tether hangs 150px below; grabs nearest dynamic body within 70px of its end at sim start; cut by scissors/flame |
+| `scissors` | 74×40 | ✓ | ✓ (sandbox) | ✓ | – | cuts any rope whose line crosses its OBB |
+| `candle` | 26×58 | ✓ | ✓ (sandbox) | – | – | lit by default; flame tip ignites fuses, pops balloons, burns ropes; doused by water; relightable |
+| `fuse` | 130×12 | ✓ sensor | ✓ (sandbox) | ✓ | – | bodies pass through; burns as interval [a,b] from ignition point both ways in ~2.5s (`FUSE_BURN_FRAMES 150`); fronts are flame points |
+| `hydrant` | 52×62 | ✓ | ✓ (sandbox) | – | right/left/up | water jet reach 240, half-width 46: pushes EVERYTHING incl. berries (marbles reduced), extinguishes flames |
+| `switch` | 84×20 | ✓ | ✓ (sandbox) | – | – | pressure plate; wires to nearest fan/conveyor/magnet within 260px at sim start; device runs only while pressed (magnet: switch replaces bump/timer) |
+| `fist` | 66×46 | ✓ | ✓ (sandbox) | – | – | punches a body landing on top straight up at 15 px/f (`FIST_LAUNCH`), 60-frame cooldown |
 | `shelf` | w×24 (default 200) | ✓ | fixed-only | ✓ | – | `sizable` (levels set w/h/angle) |
 | `wall` | 24×200 | ✓ | fixed-only | – | – | `sizable` |
 | `berry` | r 16 | dynamic | fixed-only* | – | – | THE goal ball; `isBerry` flag |
@@ -265,6 +272,16 @@ Executed **before** each `Engine.update`:
 - **Balloon buoyancy.** Unpopped balloons get
   `F_up = mass × gravity × 0.001 × 1.65` each frame (net ~0.65 g upward);
   `frictionAir 0.045` caps rise speed at ~1–2 px/f.
+- **Machine shop (sandbox parts).** All wired in `createSim` (ropes tether the
+  nearest dynamic body; switches link the nearest fan/conveyor/magnet, marking
+  it `switchControlled`) and simulated in `applyBehaviours` in this order:
+  pressure-switch scan → device gating (`poweredNow`) → fan/magnet/balloon →
+  conveyor pairs → hydrant push+douse → fuse-interval advance → flame-point
+  collection → flame effects (pop/ignite/relight/burn-rope) → scissors-rope
+  intersection → fist cooldown. New events: `snip {cause:'blade'|'fire'}`,
+  `ignite`, `extinguish`, `switch_on/off`, `thwack`. A burning fuse suppresses
+  the quiescence detector (a pending delay is not "stuck"). Water loop name
+  for hydrants: `'water'` (started per-hydrant in game.js `startLoops`).
 - **Conveyor drive.** For each active collision pair involving a conveyor:
   the other body's x-velocity is steered toward `±3.2` by at most 0.4 px/f²
   per frame, and its angular velocity is damped ×0.9 (so balls ride instead of
