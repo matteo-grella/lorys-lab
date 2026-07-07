@@ -454,6 +454,15 @@
     349.23, 440, 523.25, 440,        392, 493.88, 587.33, 783.99 // bar 8 turnaround
   ];
   var BASS = [130.8, 110, 87.3, 98, 130.8, 110, 87.3, 98];
+  // B section: a lifted "answer" phrase in the same key and register — plays
+  // every third loop (A, A, B, A, A, B ...) so the tune varies then returns.
+  var MELODY_B = [
+    659.25, 783.99, 1046.5, 783.99,  587.33, 698.46, 880, 698.46,
+    523.25, 659.25, 783.99, 659.25,  493.88, 587.33, 783.99, 587.33,
+    659.25, 783.99, 1046.5, 783.99,  587.33, 698.46, 880, 698.46,
+    523.25, 659.25, 783.99, 659.25,  493.88, 587.33, 783.99, 987.77 // leads back to A
+  ];
+  var BASS_B = [130.8, 146.83, 130.8, 98, 130.8, 146.83, 130.8, 98];
   var mus = { timer: null, slot: 0, nextTime: 0, loopN: 0, voices: [], lp: null, bassLp: null };
 
   function duck(depth, t) { // §2 ducking: fast dip, restore starting at t + 2.2 s
@@ -488,11 +497,13 @@
   }
   function scheduleSlot(slot, time, loopN) {
     var t = Math.max(ctx.currentTime, time + rnd(-0.012, 0.012)); // humanize timing
-    var f = MELODY[slot], alt = loopN % 2 === 1;
-    if (alt && slot === 7) f = 659.25; // every 2nd loop: bar 2 last note C5 -> E5
+    var sectionB = loopN % 3 === 2;            // A, A, B, A, A, B ...
+    var f = (sectionB ? MELODY_B : MELODY)[slot];
+    var alt = !sectionB && loopN % 2 === 1;    // micro-variations on A only
+    if (alt && slot === 7) f = 659.25; // every 2nd A loop: bar 2 last note C5 -> E5
     melodyNote(t, f, rnd(0.85, 1.0));
     if (alt && slot === 14) melodyNote(t + 0.06, 1174.66, 0.3 * rnd(0.85, 1.0)); // D6 echo
-    if (slot % 4 === 0) bassNote(time, BASS[slot >> 2], rnd(0.85, 1.0));
+    if (slot % 4 === 0) bassNote(time, (sectionB ? BASS_B : BASS)[slot >> 2], rnd(0.85, 1.0));
   }
   function regVoice(kind, end, g, srcs, nodes) { // track for stop/steal; self-frees
     var v = { kind: kind, end: end, g: g, srcs: srcs, nodes: nodes };

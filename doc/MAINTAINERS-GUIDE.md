@@ -571,8 +571,8 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
 - **Squash & stretch**: `squash` Map keyed by Matter body id, fed by `hit`/
   `boing` events, applied as a render-only scale along the contact normal for
   0.18 s. Never touches physics.
-- **Juice** (presentation-only speed cues, toggled by the ✨ button /
-  `R.setJuice(bool)`, persisted as `save.juice`): ball motion trails
+- **Juice** (presentation-only speed cues; ALWAYS ON — the ✨ toggle was
+  removed, `R.setJuice(bool)` remains for tooling, `save.juice` is ignored): ball motion trails
   (`stepJuice` records last 6 positions above `JUICE_MIN_SPEED = 1.0` px/f;
   `drawTrails` renders speed-modulated fading ribbons), pattern spin
   exaggeration (`JUICE_SPIN = 1.45` applied in the beach/marble painters),
@@ -643,8 +643,11 @@ Public API (`window.LoryAudio`):
   loops; re-enabling mid-run requires the game to call its `startLoops()`
   helper again (it does).
 - `music.start()/stop()` — generative music-box loop (C major, 76 bpm, 8 bars,
-  humanized, 200 ms lookahead scheduler). Ducks on win (−12 dB) and bell
-  (−6 dB) with automatic restore.
+  humanized, 200 ms lookahead scheduler) with two sections: the main tune (A)
+  plays twice, a lifted answer phrase (B, `MELODY_B`/`BASS_B`) plays once,
+  then back — A,A,B repeating (`loopN % 3 === 2` selects B; the every-2nd-loop
+  micro-variations apply to A only). Ducks on win (−12 dB) and bell (−6 dB)
+  with automatic restore.
 - Internals: rate limits in `MIN_GAP` (wood 30 ms, dominoTick 30 ms, marble
   25 ms); a **two-tier voice cap** — at ≥16 concurrent voices only
   low-priority sounds (dominoTick, marble) are dropped, and a hard ceiling of

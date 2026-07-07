@@ -36,9 +36,8 @@ self-contained file.
   where they can be replayed, edited (✎ reopens the scene in the sandbox and
   💾 updates it in place), or deleted; the goal is always feeding Lory
   (berry + bowl required).
-- **✨ Juice toggle** (title screen + top bar): cartoon speed effects on
-  rolling balls — motion trails, exaggerated spin, lean, dust puffs. Pure
-  rendering; physics and level solutions are untouched.
+- **Cartoon speed effects** on rolling balls — motion trails, exaggerated
+  spin, lean, dust puffs. Pure rendering; physics and solutions untouched.
 - **Start fresh**: a reset button on the title screen erases all stars,
   unlocks, and created puzzles (with confirmation) while keeping settings.
 - **iOS/Android**: see [`doc/IOS-APP-GUIDE.md`](doc/IOS-APP-GUIDE.md) for the

@@ -186,8 +186,7 @@
       <button class="chip btn" id="hintBtn" title="Hint">💡</button>
       <button class="chip btn" id="resetBtn" title="Clear parts">↺</button>
       <button class="chip btn" id="sfxBtn" title="Sound"></button>
-      <button class="chip btn" id="musicBtn" title="Music"></button>
-      <button class="chip btn" id="juiceBtn" title="Speed sparkle effects">✨</button>`;
+      <button class="chip btn" id="musicBtn" title="Music"></button>`;
     app.appendChild(bar);
 
     // play button
@@ -215,7 +214,6 @@
       if (save.sfx && S.phase === 'run') startLoops(); // re-enable mid-run: bring the hum back
     };
     $('#musicBtn').onclick = () => { save.music = !save.music; A.setMusic(save.music); persist(); syncAudioBtns(); };
-    $('#juiceBtn').onclick = () => { save.juice = !save.juice; R.setJuice(save.juice); persist(); syncAudioBtns(); A.sfx('button'); };
     play.onclick = () => { S.phase === 'run' ? stopRun(true) : startRun(); };
 
     syncAudioBtns();
@@ -225,7 +223,6 @@
     $('#sfxBtn').textContent = save.sfx ? '🔊' : '🔇';
     $('#musicBtn').textContent = save.music ? '🎵' : '𝄽';
     $('#musicBtn').style.opacity = save.music ? 1 : 0.5;
-    $('#juiceBtn').style.opacity = save.juice ? 1 : 0.4;
   }
 
   function updateTopbar() {
@@ -1118,7 +1115,6 @@
   function boot() {
     cv = $('#game');
     R.init(cv);
-    R.setJuice(save.juice);
     buildDom();
     layout();
     window.addEventListener('resize', layout);

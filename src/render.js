@@ -27,7 +27,7 @@
   let particles = [];
   let shakeT = 0;
   // "juice": presentation-only speed cues (trails, exaggerated spin, lean,
-  // dust). NEVER touches physics — toggled by the ✨ button.
+  // dust). NEVER touches physics. Always on; setJuice remains for tooling.
   let juicy = true;
   const JUICE_SPIN = 1.45;        // pattern spin exaggeration while juicy
   const JUICE_MIN_SPEED = 1.0;    // px/frame before trails/dust appear (slow
