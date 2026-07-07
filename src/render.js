@@ -727,6 +727,12 @@
       const fm = body ? body.plugin.lab.fist : { cooldown: 0 };
       const punch = fm.cooldown > FIST_ANIM_T ? (fm.cooldown - FIST_ANIM_T) / (60 - FIST_ANIM_T) : 0;
       const lift = punch * 26; // glove extends upward right after firing
+      // back plunger (remote trigger): pops back out as the fist re-arms
+      const plunge = fm.cooldown > FIST_ANIM_T ? 2 : 7;
+      c.fillStyle = C.poppy;
+      rr(c, -11, d.h / 2 - 3, 22, plunge, 3); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5;
+      rr(c, -11, d.h / 2 - 3, 22, plunge, 3); c.stroke();
       // box base
       c.fillStyle = C.woodLight; rr(c, -d.w / 2, 0, d.w, d.h / 2, 5); c.fill();
       c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, 0, d.w, d.h / 2, 5); c.stroke();

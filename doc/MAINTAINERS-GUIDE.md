@@ -197,7 +197,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `fuse` | 130×12 | ✓ sensor | ✓ (sandbox) | ✓ | – | bodies pass through; burns as interval [a,b] from ignition point both ways in ~2.5s (`FUSE_BURN_FRAMES 150`); fronts are flame points |
 | `hydrant` | 52×62 | ✓ | ✓ (sandbox) | – | right/left/up | sleepy like the magnet: a bump (relSpeed ≥ 1.6) opens the valve for `HYDRANT_ACTIVE_FRAMES 180` (~3s), or a wired switch drives it; while active the jet (reach 240, half-width 46) pushes EVERYTHING incl. berries (marbles reduced) and extinguishes flames. Events `water_on/water_off` drive the audio loop |
 | `switch` | 84×20 | ✓ | ✓ (sandbox) | – | – | pressure plate; wires to nearest fan/conveyor/magnet/hydrant within 260px at sim start; device runs only while pressed (magnet: switch replaces bump/timer) |
-| `fist` | 66×46 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360°: punches a body touching its GLOVE side (local −y) along its facing at 15 px/f (`FIST_LAUNCH`, tangential velocity preserved), 60-frame cooldown |
+| `fist` | 66×46 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360°: punches along its facing at 15 px/f (`FIST_LAUNCH`, tangential velocity preserved), 60-frame cooldown. Two triggers: contact on the GLOVE side (local −y) punches the toucher; contact on the BACK plunger (local +y) fires remotely, launching everything in the muzzle zone (≤55px in front) — a pre-loadable cannon |
 | `shelf` | w×24 (default 200) | ✓ | fixed-only | ✓ | – | `sizable` (levels set w/h/angle) |
 | `wall` | 24×200 | ✓ | fixed-only | – | – | `sizable` |
 | `berry` | r 16 | dynamic | fixed-only* | – | – | THE goal ball; `isBerry` flag |

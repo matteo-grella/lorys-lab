@@ -442,6 +442,24 @@ function run(level, placements, seconds = 12, watch = null) {
     r.won && r.events.some(e => e.type === 'thwack'), `t=${r.seconds}s`);
 }
 
+// 27. Back plunger: a pre-loaded fist fires like a cannon when something
+//     presses the button on its back.
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'fist', x: 500, y: 650, angle: 90 },      // glove points right
+      { type: 'ball_beach', x: 552, y: 660 },           // loaded against the glove
+      { type: 'bell', x: 950, y: 645 },
+    ],
+  };
+  const idle = Core.simulate(level, [], { maxSeconds: 6 });
+  check('loaded fist waits (nothing presses the back button)', !idle.won && idle.settled);
+  const r = Core.simulate(level, [{ type: 'ball_marble', x: 467, y: 480 }], { maxSeconds: 10, collectEvents: true });
+  check('marble on back plunger fires the loaded ball into the bell',
+    r.won && r.events.some(e => e.type === 'thwack'), `t=${r.seconds}s`);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

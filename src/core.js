@@ -489,22 +489,42 @@
           }
         }
 
-        // Spring-loaded fist: punches whatever lands on its glove side, along
-        // the direction the glove points (local -y rotated by the body angle).
+        // Spring-loaded fist. Two triggers:
+        //  - GLOVE side (local -y): punches the toucher itself, as before;
+        //  - BACK plunger (local +y): fires the glove remotely, launching
+        //    whatever is loaded in front of it — a cannon you can pre-load.
         for (const [fb, o] of [[a, b], [b, a]]) {
           const fm = lab(fb).fist;
-          if (fm && !o.isStatic && !o.isSensor && fm.cooldown <= 0 && relSpeed >= 1) {
-            const l = toLocal(fb, o.position);
-            if (l.y >= -6) continue;           // touched the base, not the glove
-            fm.cooldown = FIST_COOLDOWN;
-            const nx = Math.sin(fb.angle), ny = -Math.cos(fb.angle);
-            // project out the incoming normal component, add the punch
-            const vn = o.velocity.x * nx + o.velocity.y * ny;
-            Body.setVelocity(o, {
-              x: o.velocity.x - vn * nx + nx * FIST_LAUNCH,
-              y: o.velocity.y - vn * ny + ny * FIST_LAUNCH,
+          if (!fm || o.isStatic || o.isSensor || fm.cooldown > 0 || relSpeed < 1) continue;
+          const meta = lab(fb);
+          const l = toLocal(fb, o.position);
+          const nx = Math.sin(fb.angle), ny = -Math.cos(fb.angle);
+          const launch = (body) => {
+            const vn = body.velocity.x * nx + body.velocity.y * ny;
+            Body.setVelocity(body, {
+              x: body.velocity.x - vn * nx + nx * FIST_LAUNCH,
+              y: body.velocity.y - vn * ny + ny * FIST_LAUNCH,
             });
-            state.events.push({ type: 'thwack', x: fb.position.x + nx * 24, y: fb.position.y + ny * 24, bodyId: o.id, partId: lab(fb).id });
+          };
+          if (l.y < -6) {
+            // direct hit on the glove: punch the toucher
+            fm.cooldown = FIST_COOLDOWN;
+            launch(o);
+            state.events.push({ type: 'thwack', x: fb.position.x + nx * 24, y: fb.position.y + ny * 24, bodyId: o.id, partId: meta.id });
+          } else if (l.y > meta.h / 2 - 4) {
+            // back plunger pressed: fire, launching everything in the muzzle
+            // zone in front of the glove (up to ~55px out)
+            fm.cooldown = FIST_COOLDOWN;
+            let hit = null;
+            for (const bb of Composite.allBodies(world)) {
+              if (bb.isStatic || bb.isSensor || bb === o) continue;
+              const lb2 = toLocal(fb, bb.position);
+              if (Math.abs(lb2.x) <= meta.w / 2 + 12 && lb2.y <= -meta.h / 2 + 6 && lb2.y >= -meta.h / 2 - 55) {
+                launch(bb);
+                hit = bb;
+              }
+            }
+            state.events.push({ type: 'thwack', x: fb.position.x + nx * 24, y: fb.position.y + ny * 24, bodyId: hit ? hit.id : undefined, partId: meta.id });
           }
         }
 
