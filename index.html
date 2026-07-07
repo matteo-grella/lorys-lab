@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lory's Lab">
+<meta name="theme-color" content="#FBF1DE">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<title>Lory's Lab</title>
+<style>
+  :root {
+    --ink: #43342B; --paper: #FFF9EE; --cream: #FBF1DE; --peach: #F5DFC3;
+    --woodL: #EABF85; --woodM: #C9915A; --woodD: #8F6238;
+    --blue: #4E86E0; --blueD: #3563B8; --sunny: #FFC53D; --tang: #FF8E3C;
+    --poppy: #E8563F; --leaf: #5FB358; --sky: #7CC7E8; --blossom: #F2A0BD;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: #E9D9BE; }
+  body { font-family: ui-rounded, -apple-system, "Segoe UI", system-ui, sans-serif; color: var(--ink); }
+  #app {
+    position: absolute; left: 50%; top: 50%;
+    width: 1280px; height: 830px;
+    transform: translate(-50%, -50%);
+    transform-origin: center center;
+  }
+  #game { width: 1280px; height: 830px; display: block; border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(67,52,43,0.25); touch-action: none; }
+
+  /* top bar */
+  .topbar { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; align-items: center; pointer-events: none; }
+  .topbar > * { pointer-events: auto; }
+  .chip {
+    background: var(--paper); border: none; border-radius: 28px; min-height: 52px;
+    padding: 0 20px; font: 700 18px ui-rounded, system-ui, sans-serif; color: var(--ink);
+    box-shadow: 0 3px 0 rgba(67,52,43,0.25); display: flex; align-items: center; gap: 6px;
+  }
+  .chip.btn { cursor: pointer; min-width: 56px; justify-content: center; font-size: 22px; transition: transform 0.12s; }
+  .chip.btn.labeled { font-size: 17px; background: var(--sunny); box-shadow: 0 3px 0 #C99A20; white-space: nowrap; }
+  .chip.btn:hover { transform: scale(1.06); }
+  .chip.btn:active { transform: translateY(3px); box-shadow: 0 0 0 rgba(0,0,0,0); }
+
+  /* play button */
+  .playbtn {
+    position: absolute; right: 22px; bottom: 128px;
+    width: 92px; height: 92px; border-radius: 50%;
+    border: none; background: var(--leaf); color: var(--paper);
+    font-size: 40px; cursor: pointer;
+    box-shadow: 0 6px 0 #3E8039, 0 10px 24px rgba(67,52,43,0.3);
+    transition: transform 0.15s, background 0.25s, border-radius 0.25s;
+  }
+  .playbtn:hover { transform: scale(1.05); }
+  .playbtn:active { transform: translateY(4px); box-shadow: 0 2px 0 #3E8039; }
+  .playbtn.running { background: var(--poppy); border-radius: 26px; box-shadow: 0 6px 0 #B93A28, 0 10px 24px rgba(67,52,43,0.3); }
+
+  /* overlays */
+  .overlay-root { position: absolute; inset: 0; }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: linear-gradient(#FBF1DE, #F5DFC3); border-radius: 18px; }
+  .title-screen h1 { font-size: 74px; font-weight: 800; color: var(--ink); letter-spacing: 0.5px;
+    text-shadow: 0 4px 0 rgba(201,145,90,0.4); }
+  .title-screen .tag { font-size: 22px; color: #8C7A6B; font-weight: 600; margin-top: -8px; }
+  .big {
+    border: none; border-radius: 22px; min-width: 280px; min-height: 68px;
+    font: 800 26px ui-rounded, system-ui, sans-serif; color: var(--paper); cursor: pointer;
+    transition: transform 0.12s;
+  }
+  .big:hover { transform: scale(1.04); }
+  .big:active { transform: translateY(3px); }
+  .big.leaf { background: var(--leaf); box-shadow: 0 5px 0 #3E8039; }
+  .big.blue { background: var(--blue); box-shadow: 0 5px 0 var(--blueD); }
+  .mode-row { display: flex; gap: 12px; align-items: center; margin-top: 16px; font-weight: 700; color: #8C7A6B; flex-wrap: wrap; justify-content: center; }
+  .mode { border: 3px solid rgba(67,52,43,0.15); background: var(--paper); border-radius: 18px; padding: 10px 18px;
+    font: 700 17px ui-rounded, system-ui, sans-serif; color: var(--ink); cursor: pointer; }
+  .mode small { display: block; font-weight: 600; color: #8C7A6B; }
+  .mode.on { border-color: var(--blue); background: #EAF2FF; }
+  .title-toggles { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
+  .title-toggles .chip.btn.reset { font-size: 15px; font-weight: 800; color: var(--poppy); }
+  .big.danger { background: var(--poppy); box-shadow: 0 5px 0 #B93A28; }
+  .reset-warn { font-size: 17px; font-weight: 600; color: var(--ink); margin: 4px 0 18px; line-height: 1.4; }
+
+  /* level select */
+  .levels-screen { justify-content: flex-start; padding: 30px 60px; overflow: auto; }
+  .lv-head { display: flex; align-items: center; gap: 16px; width: 100%; margin-bottom: 18px; }
+  .lv-head h2 { font-size: 40px; font-weight: 800; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; width: 100%; }
+  .card {
+    background: var(--paper); border: none; border-radius: 22px; padding: 18px 10px 14px; cursor: pointer;
+    box-shadow: 0 4px 0 rgba(67,52,43,0.2); font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 128px;
+    transition: transform 0.12s;
+  }
+  .card:hover { transform: scale(1.05); }
+  .card .num { font-size: 34px; font-weight: 800; color: var(--blue); }
+  .card .nm { font-weight: 700; font-size: 15px; text-align: center; line-height: 1.15; }
+  .card .stars { color: var(--sunny); font-size: 17px; letter-spacing: 2px; }
+  .card .stars .dim, .winstars .wstar { color: rgba(67,52,43,0.18); }
+  .card.locked { opacity: 0.55; cursor: default; }
+  .card.locked:hover { transform: none; }
+  .card.sandbox .num { color: var(--tang); }
+
+  /* win overlay */
+  .dim-bg { position: absolute; inset: 0; background: rgba(67,52,43,0.35); border-radius: 18px; animation: fadein 0.2s; }
+  .wincard {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    background: var(--paper); border-radius: 32px; padding: 8px 46px 34px; text-align: center;
+    border: 6px solid var(--woodL); outline: 2px solid var(--woodD);
+    animation: popin 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+  }
+  .wincard h2 { font-size: 40px; font-weight: 800; margin: -26px 0 4px; }
+  .wincard canvas { margin-top: -70px; }
+  .winstars { font-size: 62px; letter-spacing: 8px; margin: 2px 0 14px; }
+  .wstar { display: inline-block; transform: scale(0); animation: starpop 0.45s cubic-bezier(0.2, 1.8, 0.4, 1) forwards; }
+  .wstar.earn { color: var(--sunny); text-shadow: 0 3px 0 rgba(67,52,43,0.2); }
+  .row { display: flex; gap: 14px; justify-content: center; }
+  .row .big { min-width: 170px; }
+
+  /* my puzzles + name dialog */
+  .lv-mine { width: 100%; margin-top: 22px; }
+  .lv-mine h3 { font-size: 26px; font-weight: 800; margin-bottom: 12px; }
+  .card.mine { position: relative; }
+  .card.mine .num { color: var(--tang); }
+  .pdel {
+    position: absolute; top: 6px; right: 8px; font-size: 14px; font-weight: 800;
+    color: var(--poppy); background: rgba(232,86,63,0.12); border-radius: 12px; padding: 3px 8px;
+  }
+  .pdel:hover { background: rgba(232,86,63,0.25); }
+  .pedit {
+    position: absolute; top: 6px; left: 8px; font-size: 14px; font-weight: 800;
+    color: var(--blue); background: rgba(78,134,224,0.12); border-radius: 12px; padding: 3px 8px;
+  }
+  .pedit:hover { background: rgba(78,134,224,0.28); }
+  .namecard { padding-top: 30px; }
+  .namecard input {
+    display: block; margin: 10px auto 20px; width: 320px; text-align: center;
+    font: 700 24px ui-rounded, system-ui, sans-serif; color: var(--ink);
+    background: var(--cream); border: 3px solid var(--woodL); border-radius: 16px; padding: 12px 16px;
+    outline: none;
+  }
+  .namecard input:focus { border-color: var(--blue); }
+
+  /* toast */
+  .toast {
+    position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%) translateY(20px);
+    background: var(--ink); color: var(--paper); border-radius: 20px; padding: 12px 24px;
+    font-weight: 700; font-size: 18px; opacity: 0; transition: 0.25s; pointer-events: none;
+  }
+  .toast.show { opacity: 0.95; transform: translateX(-50%); }
+
+  @keyframes fadein { from { opacity: 0; } }
+  @keyframes popin { from { transform: translate(-50%, -46%) scale(0.7); opacity: 0; } }
+  @keyframes starpop { to { transform: scale(1); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+</div>
+<script src="vendor/matter.min.js"></script>
+<script src="src/core.js"></script>
+<script src="src/levels.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/render.js"></script>
+<script src="src/game.js"></script>
+<script>
+// Offline support on the hosted site only (no-op for file:// and the
+// single-file artifact build, where there is no sw.js to fetch).
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(function () {});
+}
+</script>
+</body>
+</html>

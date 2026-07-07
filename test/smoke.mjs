@@ -1,0 +1,231 @@
+// Physics behaviour smoke tests — validates every part does its job headlessly.
+// Run: node test/smoke.mjs
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const Core = require('../src/core.js');
+
+const results = [];
+function check(name, cond, detail) {
+  results.push({ name, pass: !!cond });
+  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
+}
+
+// Run a sim watching one body; returns stats + outcome.
+function run(level, placements, seconds = 12, watch = null) {
+  const sim = Core.createSim(level, placements);
+  const body = watch ? sim.bodies().find(b => b.plugin?.lab?.type === watch) : null;
+  let minY = body ? body.position.y : Infinity, maxX = body ? body.position.x : -Infinity;
+  for (let f = 0; f < seconds * 60; f++) {
+    sim.step();
+    if (body) { minY = Math.min(minY, body.position.y); maxX = Math.max(maxX, body.position.x); }
+    if (sim.state.won) break;
+  }
+  return { won: sim.state.won, t: +(sim.state.frames / 60).toFixed(2), minY, maxX, sim };
+}
+
+// 1. Null test + plank redirect into bowl.
+{
+  const level = {
+    goalType: 'catch',
+    fixed: [
+      { type: 'shelf', x: 300, y: 300, w: 200, h: 24, angle: 7 },
+      { type: 'berry', x: 260, y: 270 },
+      { type: 'bowl', x: 640, y: 640 },
+    ],
+  };
+  const noWin = Core.simulate(level, [], { maxSeconds: 10 });
+  check('null-test: level alone does not win', !noWin.won);
+  const r = run(level, [{ type: 'plank', x: 470, y: 390, angle: 18 }], 14);
+  check('berry rolls down tilted shelf, redirected by plank into bowl', r.won, `t=${r.t}s`);
+}
+
+// 2. Trampoline: marble rebounds to ~spawn height, stable (no energy gain).
+{
+  const r = run({
+    goalType: 'catch',
+    fixed: [{ type: 'ball_marble', x: 400, y: 200 }, { type: 'bowl', x: 1100, y: 640 }],
+  }, [{ type: 'trampoline', x: 400, y: 600 }], 6, 'ball_marble');
+  check('trampoline rebounds marble to ~spawn height', r.minY < 230 && r.minY > 100, `peak y=${r.minY.toFixed(0)} (spawn 200)`);
+}
+
+// 3. Fan: strong enough for beach ball, too weak for marble.
+{
+  const mk = (ball) => ({
+    goalType: 'bell',
+    fixed: [
+      { type: 'shelf', x: 500, y: 500, w: 400, h: 24 },
+      { type: ball, x: 420, y: 459 },
+      { type: 'bell', x: 700, y: 460 },
+    ],
+  });
+  const r1 = run(mk('ball_beach'), [{ type: 'fan', x: 320, y: 460, dir: 'right' }], 12);
+  check('fan blows beach ball into bell', r1.won, `t=${r1.t}s`);
+  const r2 = run(mk('ball_marble'), [{ type: 'fan', x: 320, y: 460, dir: 'right' }], 8);
+  check('fan too weak to push marble into bell', !r2.won);
+}
+
+// 4. Dominoes: ramp-launched marble starts a 5-chain; last domino topples off
+//    the shelf edge onto a hanging bell.
+{
+  const r = run({
+    goalType: 'bell',
+    fixed: [
+      { type: 'shelf', x: 390, y: 400, w: 280, h: 24 },
+      { type: 'plank', x: 240, y: 330, angle: 18 },
+      { type: 'ball_marble', x: 175, y: 290 },
+      { type: 'bell', x: 545, y: 555 },
+    ],
+  }, [0, 1, 2, 3, 4, 5].map(i => ({ type: 'domino', x: 330 + i * 34, y: 360 })), 14);
+  check('domino chain topples off shelf edge and rings bell', r.won, `t=${r.t}s`);
+}
+
+// 5. Goal balloon pops when hit by a dropped marble.
+{
+  const r = run({
+    goalType: 'pop',
+    fixed: [{ type: 'balloon_goal', x: 500, y: 400 }, { type: 'spikes', x: 1000, y: 150 }],
+  }, [{ type: 'ball_marble', x: 500, y: 150 }], 8);
+  check('marble drop pops goal balloon', r.won, `t=${r.t}s`);
+}
+
+// 6. Fan pushes tethered goal balloon sideways into spikes.
+{
+  const r = run({
+    goalType: 'pop',
+    fixed: [
+      { type: 'balloon_goal', x: 600, y: 350 },
+      { type: 'spikes', x: 685, y: 390, angle: 90 },
+    ],
+  }, [{ type: 'fan', x: 430, y: 360, dir: 'right' }], 10);
+  check('fan pushes goal balloon into spikes', r.won, `t=${r.t}s`);
+}
+
+// 7. Placeable balloon rises and pops ONLY on spikes (goal balloon untouched).
+{
+  const level = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'balloon_goal', x: 800, y: 500 },
+      { type: 'spikes', x: 400, y: 200 },
+    ],
+  };
+  const r = Core.simulate(level, [{ type: 'balloon', x: 400, y: 600 }], { maxSeconds: 10, collectEvents: true });
+  const pops = r.events.filter(e => e.type === 'pop');
+  check('placeable balloon rises, pops on spikes; goal balloon unaffected',
+    !r.won && pops.length === 1 && !pops[0].goal, `pops=${pops.length}`);
+}
+
+// 8. Seesaw: marble drop flings berry far across the board.
+{
+  const r = run({
+    goalType: 'catch',
+    fixed: [
+      { type: 'ball_marble', x: 405, y: 200 },
+      { type: 'berry', x: 595, y: 470 },
+      { type: 'bowl', x: 1150, y: 640 },
+    ],
+  }, [{ type: 'seesaw', x: 500, y: 500 }], 8, 'berry');
+  check('seesaw flings berry across the board (>250px)', r.maxX > 850, `maxX=${r.maxX.toFixed(0)} from 595`);
+}
+
+// 9. Conveyor carries berry into bowl.
+{
+  const r = run({
+    goalType: 'catch',
+    fixed: [{ type: 'berry', x: 400, y: 300 }, { type: 'bowl', x: 650, y: 640 }],
+  }, [{ type: 'conveyor', x: 450, y: 380, dir: 'right' }], 10);
+  check('conveyor carries berry into bowl', r.won, `t=${r.t}s`);
+}
+
+// 10. Control: straight fall into bowl + sparkle collection.
+{
+  const r = Core.simulate({
+    goalType: 'catch',
+    fixed: [{ type: 'berry', x: 500, y: 150 }, { type: 'bowl', x: 500, y: 640 }],
+    sparkles: [{ x: 500, y: 300 }, { x: 500, y: 420 }, { x: 500, y: 540 }],
+  }, [], { maxSeconds: 8 });
+  check('falling berry wins and collects 3 sparkles', r.won && r.sparkles === 3, `sparkles=${r.sparkles}/3`);
+}
+
+// 11. Bucket holds a berry (no win, settles).
+{
+  const r = Core.simulate({
+    goalType: 'catch',
+    fixed: [{ type: 'berry', x: 500, y: 100 }, { type: 'bowl', x: 900, y: 640 }],
+  }, [{ type: 'bucket', x: 500, y: 400 }], { maxSeconds: 8 });
+  check('bucket catches and holds berry', !r.won && r.settled);
+}
+
+// 12. Bumper deflects a falling beach ball sideways with energy.
+{
+  const r = run({
+    goalType: 'catch',
+    fixed: [{ type: 'ball_beach', x: 480, y: 150 }, { type: 'bowl', x: 900, y: 640 }],
+  }, [{ type: 'bumper', x: 500, y: 450 }], 8, 'ball_beach');
+  check('bumper deflects beach ball leftwards away', r.sim.bodies().find(b => b.plugin?.lab?.type === 'ball_beach').position.x < 400, '');
+}
+
+// 13. Magnet: asleep it ignores the marble; woken by a dropped ball it yanks
+//     the marble off its shelf across a gap, ringing a bell on the way.
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'shelf', x: 340, y: 460, w: 200, h: 24 },
+      { type: 'ball_marble', x: 420, y: 429 },
+      { type: 'bell', x: 550, y: 430 },
+      { type: 'shelf', x: 700, y: 500, w: 160, h: 24 },
+    ],
+  };
+  const asleep = Core.simulate(level, [{ type: 'magnet', x: 700, y: 460 }], { maxSeconds: 6 });
+  check('sleeping magnet ignores nearby marble', !asleep.won && asleep.settled);
+
+  const r = Core.simulate(level, [
+    { type: 'magnet', x: 700, y: 460 },
+    { type: 'ball_beach', x: 700, y: 250 }, // dropped on the magnet's button
+  ], { maxSeconds: 10, collectEvents: true });
+  const on = r.events.some(e => e.type === 'magnet_on');
+  check('bumped magnet wakes, yanks marble across gap into bell', r.won && on, `t=${r.seconds}s on=${on}`);
+}
+
+// 14. Magnet only attracts metal: berry unaffected.
+{
+  const level = {
+    goalType: 'catch',
+    fixed: [
+      { type: 'shelf', x: 300, y: 460, w: 200, h: 24 },
+      { type: 'berry', x: 360, y: 431 },
+      { type: 'bowl', x: 700, y: 640 },
+      { type: 'shelf', x: 700, y: 500, w: 160, h: 24 },
+    ],
+  };
+  const r = Core.simulate(level, [
+    { type: 'magnet', x: 700, y: 460 },
+    { type: 'ball_beach', x: 700, y: 250 },
+  ], { maxSeconds: 8 });
+  check('magnet ignores non-metal berry', !r.won && r.settled);
+}
+
+// 15. Magnet releases: after the pulse ends, a caught marble drops.
+{
+  const level = {
+    goalType: 'catch',
+    fixed: [
+      { type: 'shelf', x: 340, y: 460, w: 200, h: 24 },
+      { type: 'ball_marble', x: 430, y: 429 },
+      { type: 'bowl', x: 700, y: 640 },
+      { type: 'shelf', x: 840, y: 500, w: 100, h: 24 },
+    ],
+  };
+  const r = run(level, [
+    { type: 'magnet', x: 700, y: 420 },
+    { type: 'ball_beach', x: 700, y: 250 },
+  ], 12, 'ball_marble');
+  const marble = r.sim.bodies().find(b => b.plugin?.lab?.type === 'ball_marble');
+  check('magnet releases marble after pulse (marble ends below magnet)',
+    marble.position.x > 600 && marble.position.y > 560, `final=(${marble.position.x.toFixed(0)},${marble.position.y.toFixed(0)})`);
+}
+
+const fails = results.filter(r => !r.pass);
+console.log(`\n${results.length - fails.length}/${results.length} passed`);
+process.exit(fails.length ? 1 : 0);

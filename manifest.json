@@ -1,0 +1,14 @@
+{
+  "name": "Lory's Lab",
+  "short_name": "Lory's Lab",
+  "description": "Build silly machines. Feed the bird.",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#FBF1DE",
+  "theme_color": "#FBF1DE",
+  "start_url": ".",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,976 @@
+{
+ "levels": [
+  {
+   "title": "Roll to the Bowl",
+   "goalType": "catch",
+   "goalText": "Help the berry roll all the way into Lory's bowl!",
+   "teaches": "plank: a tilted plank makes a ball roll downhill",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 260,
+     "y": 240,
+     "w": 320,
+     "h": 40,
+     "angle": 12
+    },
+    {
+     "type": "berry",
+     "x": 140,
+     "y": 178
+    },
+    {
+     "type": "bowl",
+     "x": 870,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "plank",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "plank",
+     "x": 560,
+     "y": 380,
+     "angle": 15
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 470,
+     "y": 270
+    },
+    {
+     "x": 620,
+     "y": 370
+    },
+    {
+     "x": 800,
+     "y": 505
+    }
+   ],
+   "hintText": "The berry falls off the shelf right there... put your plank under it, tilted toward my bowl, and it will keep on rolling!"
+  },
+  {
+   "title": "Boing! Over the Wall",
+   "goalType": "catch",
+   "goalText": "Bounce the berry over the wall and into the bowl!",
+   "teaches": "trampoline: launches a falling ball back up high",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 240,
+     "y": 220,
+     "w": 240,
+     "h": 40,
+     "angle": 8
+    },
+    {
+     "type": "berry",
+     "x": 150,
+     "y": 170
+    },
+    {
+     "type": "wall",
+     "x": 700,
+     "y": 595,
+     "w": 40,
+     "h": 190
+    },
+    {
+     "type": "wall",
+     "x": 890,
+     "y": 385,
+     "w": 40,
+     "h": 610
+    },
+    {
+     "type": "bowl",
+     "x": 795,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "trampoline",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "trampoline",
+     "x": 560,
+     "y": 678
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 450,
+     "y": 290
+    },
+    {
+     "x": 700,
+     "y": 230
+    },
+    {
+     "x": 830,
+     "y": 420
+    }
+   ],
+   "hintText": "See where the berry plops onto the floor? Put the trampoline right on that spot and it will bounce sky-high over the wall!"
+  },
+  {
+   "title": "Heavy Helper",
+   "goalType": "bell",
+   "goalText": "Drop the heavy marble to fling the berry up to the bell!",
+   "teaches": "seesaw + marble: a heavy drop on one end flings a light thing up",
+   "fixed": [
+    {
+     "type": "seesaw",
+     "x": 620,
+     "y": 590
+    },
+    {
+     "type": "berry",
+     "x": 525,
+     "y": 566
+    },
+    {
+     "type": "shelf",
+     "x": 520,
+     "y": 290,
+     "w": 160,
+     "h": 40
+    },
+    {
+     "type": "bell",
+     "x": 520,
+     "y": 370
+    }
+   ],
+   "tray": [
+    {
+     "type": "ball_marble",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "ball_marble",
+     "x": 715,
+     "y": 160
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 715,
+     "y": 380
+    },
+    {
+     "x": 525,
+     "y": 470
+    },
+    {
+     "x": 522,
+     "y": 400
+    }
+   ],
+   "hintText": "The berry sits on one end of my seesaw. Hold the marble WAY up high over the other end and let it drop. Boing... DING!"
+  },
+  {
+   "title": "Windy Day",
+   "goalType": "bell",
+   "goalText": "Blow the beach ball off the shelf to ring the bell!",
+   "teaches": "fan: steady wind pushes light things like beach balls",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 360,
+     "y": 480,
+     "w": 280,
+     "h": 40
+    },
+    {
+     "type": "ball_beach",
+     "x": 400,
+     "y": 432
+    },
+    {
+     "type": "bell",
+     "x": 690,
+     "y": 660
+    }
+   ],
+   "tray": [
+    {
+     "type": "fan",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "fan",
+     "x": 270,
+     "y": 432,
+     "dir": "right"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 520,
+     "y": 430
+    },
+    {
+     "x": 590,
+     "y": 520
+    },
+    {
+     "x": 660,
+     "y": 600
+    }
+   ],
+   "hintText": "The beach ball is so light! Set the fan on the shelf behind it, blowing toward the bell. Whooooosh!"
+  },
+  {
+   "title": "Domino Parade",
+   "goalType": "catch",
+   "goalText": "Fill the gap so the dominoes push the berry off the table into the bowl!",
+   "teaches": "domino: dominoes topple in a chain and can push a berry",
+   "fixed": [
+    {
+     "type": "plank",
+     "x": 300,
+     "y": 420,
+     "angle": 15
+    },
+    {
+     "type": "ball_marble",
+     "x": 250,
+     "y": 379
+    },
+    {
+     "type": "shelf",
+     "x": 640,
+     "y": 520,
+     "w": 500,
+     "h": 40
+    },
+    {
+     "type": "domino",
+     "x": 500,
+     "y": 472
+    },
+    {
+     "type": "domino",
+     "x": 540,
+     "y": 472
+    },
+    {
+     "type": "domino",
+     "x": 700,
+     "y": 472
+    },
+    {
+     "type": "domino",
+     "x": 740,
+     "y": 472
+    },
+    {
+     "type": "berry",
+     "x": 790,
+     "y": 483
+    },
+    {
+     "type": "bowl",
+     "x": 940,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "domino",
+     "count": 3
+    }
+   ],
+   "solution": [
+    {
+     "type": "domino",
+     "x": 580,
+     "y": 472
+    },
+    {
+     "type": "domino",
+     "x": 620,
+     "y": 472
+    },
+    {
+     "type": "domino",
+     "x": 660,
+     "y": 472
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 430,
+     "y": 450
+    },
+    {
+     "x": 620,
+     "y": 430
+    },
+    {
+     "x": 915,
+     "y": 550
+    }
+   ],
+   "hintText": "Three dominoes are missing from my parade! Stand them in the gap, nice and close, so the last one can nudge the berry off the table."
+  },
+  {
+   "title": "Berry Express",
+   "goalType": "catch",
+   "goalText": "Catch the berry on the belt and ride it over the wall into the bowl!",
+   "teaches": "conveyor: a moving belt carries things sideways",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 240,
+     "y": 200,
+     "w": 280,
+     "h": 40,
+     "angle": 12
+    },
+    {
+     "type": "berry",
+     "x": 130,
+     "y": 140
+    },
+    {
+     "type": "wall",
+     "x": 660,
+     "y": 565,
+     "w": 40,
+     "h": 250
+    },
+    {
+     "type": "bowl",
+     "x": 760,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "conveyor",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "conveyor",
+     "x": 560,
+     "y": 380,
+     "dir": "right"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 450,
+     "y": 240
+    },
+    {
+     "x": 590,
+     "y": 350
+    },
+    {
+     "x": 730,
+     "y": 530
+    }
+   ],
+   "hintText": "Catch the falling berry on my moving belt, arrows pointing right \u2014 it will ride straight over that wall. All aboard the Berry Express!"
+  },
+  {
+   "title": "Bumper Boing",
+   "goalType": "bell",
+   "goalText": "Bounce the beach ball off the bumper to ring the high-up bell!",
+   "teaches": "bumper: super bouncy, bounces balls much higher than the floor does",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 250,
+     "y": 320,
+     "w": 280,
+     "h": 40,
+     "angle": 12
+    },
+    {
+     "type": "ball_beach",
+     "x": 140,
+     "y": 249
+    },
+    {
+     "type": "shelf",
+     "x": 765,
+     "y": 230,
+     "w": 160,
+     "h": 40
+    },
+    {
+     "type": "bell",
+     "x": 765,
+     "y": 302
+    }
+   ],
+   "tray": [
+    {
+     "type": "bumper",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "bumper",
+     "x": 575,
+     "y": 660
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 480,
+     "y": 380
+    },
+    {
+     "x": 660,
+     "y": 375
+    },
+    {
+     "x": 745,
+     "y": 315
+    }
+   ],
+   "hintText": "Watch where the ball lands, then put the bumper right on that spot. Bumpers are SO springy the ball will rocket up to the bell!"
+  },
+  {
+   "title": "Pop Goes Bloopy",
+   "goalType": "pop",
+   "goalText": "Steer Bloopy the balloon into the spiky pokers \u2014 POP!",
+   "teaches": "balloons float up, fans steer them, spikes pop them",
+   "fixed": [
+    {
+     "type": "balloon_goal",
+     "x": 470,
+     "y": 600
+    },
+    {
+     "type": "shelf",
+     "x": 620,
+     "y": 240,
+     "w": 360,
+     "h": 40
+    },
+    {
+     "type": "spikes",
+     "x": 530,
+     "y": 272,
+     "angle": 180
+    },
+    {
+     "type": "spikes",
+     "x": 590,
+     "y": 272,
+     "angle": 180
+    },
+    {
+     "type": "spikes",
+     "x": 650,
+     "y": 272,
+     "angle": 180
+    },
+    {
+     "type": "spikes",
+     "x": 710,
+     "y": 272,
+     "angle": 180
+    }
+   ],
+   "tray": [
+    {
+     "type": "fan",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "fan",
+     "x": 430,
+     "y": 500,
+     "dir": "right"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 500,
+     "y": 520
+    },
+    {
+     "x": 545,
+     "y": 430
+    },
+    {
+     "x": 585,
+     "y": 330
+    }
+   ],
+   "hintText": "Bloopy only floats straight up and bonks the flat ceiling. Put your fan in his path blowing right, and he'll drift into the pokers!"
+  },
+  {
+   "title": "Funnel Fun",
+   "goalType": "catch",
+   "goalText": "Catch the flying berry in the bucket so it drops into the bowl!",
+   "teaches": "bucket: catches a flying ball and drops it straight down",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 220,
+     "y": 240,
+     "w": 240,
+     "h": 40,
+     "angle": 8
+    },
+    {
+     "type": "berry",
+     "x": 130,
+     "y": 190
+    },
+    {
+     "type": "bowl",
+     "x": 470,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "bucket",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "bucket",
+     "x": 470,
+     "y": 420
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 400,
+     "y": 260
+    },
+    {
+     "x": 470,
+     "y": 385
+    },
+    {
+     "x": 470,
+     "y": 560
+    }
+   ],
+   "hintText": "That berry flies off all wobbly! My bucket has a big wide mouth \u2014 catch the berry up high and it will drop straight down into the bowl."
+  },
+  {
+   "title": "Jump the Big Wall",
+   "goalType": "catch",
+   "goalText": "Bounce the berry OVER the big wall, then slide it into the bowl!",
+   "teaches": "combo: trampoline to clear a wall + plank to land the catch",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 260,
+     "y": 300,
+     "w": 240,
+     "h": 24,
+     "angle": 10
+    },
+    {
+     "type": "berry",
+     "x": 180,
+     "y": 257
+    },
+    {
+     "type": "wall",
+     "x": 640,
+     "y": 590,
+     "w": 40,
+     "h": 200
+    },
+    {
+     "type": "bowl",
+     "x": 1080,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "trampoline",
+     "count": 1
+    },
+    {
+     "type": "plank",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "trampoline",
+     "x": 550,
+     "y": 678
+    },
+    {
+     "type": "plank",
+     "x": 860,
+     "y": 500,
+     "angle": 12
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 470,
+     "y": 385
+    },
+    {
+     "x": 660,
+     "y": 340
+    },
+    {
+     "x": 990,
+     "y": 515
+    }
+   ],
+   "hintText": "Trampoline BEFORE the wall to jump it, tilted plank AFTER the wall to catch the landing and slide home. Ta-da!"
+  },
+  {
+   "title": "Beach Ball Bowling",
+   "goalType": "catch",
+   "goalText": "The fan can't push the berry... but it CAN push something that can!",
+   "teaches": "insight: wind cannot move a berry, but a wind-blown beach ball can",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 620,
+     "y": 300,
+     "w": 300,
+     "h": 40
+    },
+    {
+     "type": "berry",
+     "x": 700,
+     "y": 263
+    },
+    {
+     "type": "bowl",
+     "x": 890,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "fan",
+     "count": 1
+    },
+    {
+     "type": "ball_beach",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "ball_beach",
+     "x": 520,
+     "y": 252
+    },
+    {
+     "type": "fan",
+     "x": 395,
+     "y": 252,
+     "dir": "right"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 600,
+     "y": 235
+    },
+    {
+     "x": 760,
+     "y": 250
+    },
+    {
+     "x": 860,
+     "y": 440
+    }
+   ],
+   "hintText": "My fan is too gentle to budge a berry \u2014 but beach balls LOVE wind! Set the ball on the shelf and bowl the berry right off the edge."
+  },
+  {
+   "title": "Double Bubble Pop",
+   "goalType": "pop",
+   "goalText": "Blow BOTH balloons along the ceiling into the middle spikes!",
+   "teaches": "combo: two fans working from both sides at once",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 640,
+     "y": 100,
+     "w": 1200,
+     "h": 40
+    },
+    {
+     "type": "spikes",
+     "x": 610,
+     "y": 132,
+     "angle": 180
+    },
+    {
+     "type": "spikes",
+     "x": 670,
+     "y": 132,
+     "angle": 180
+    },
+    {
+     "type": "balloon_goal",
+     "x": 350,
+     "y": 600
+    },
+    {
+     "type": "balloon_goal",
+     "x": 920,
+     "y": 600
+    }
+   ],
+   "tray": [
+    {
+     "type": "fan",
+     "count": 2
+    }
+   ],
+   "solution": [
+    {
+     "type": "fan",
+     "x": 320,
+     "y": 158,
+     "dir": "right"
+    },
+    {
+     "type": "fan",
+     "x": 960,
+     "y": 158,
+     "dir": "left"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 350,
+     "y": 350
+    },
+    {
+     "x": 480,
+     "y": 145
+    },
+    {
+     "x": 800,
+     "y": 145
+    }
+   ],
+   "hintText": "Two balloons, one spiky spot in the middle! Point your fans toward each other and the balloons will slide along the ceiling till... POP-POP!"
+  },
+  {
+   "title": "The Long Way Home",
+   "goalType": "catch",
+   "goalText": "Carry the berry LEFT on the belt, then bounce it over the wall into the bowl!",
+   "teaches": "combo: choosing belt direction + bouncing over a wall, all leftward",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 1040,
+     "y": 180,
+     "w": 260,
+     "h": 40,
+     "angle": -10
+    },
+    {
+     "type": "berry",
+     "x": 1140,
+     "y": 125
+    },
+    {
+     "type": "wall",
+     "x": 520,
+     "y": 590,
+     "w": 40,
+     "h": 200
+    },
+    {
+     "type": "wall",
+     "x": 330,
+     "y": 475,
+     "w": 40,
+     "h": 430
+    },
+    {
+     "type": "bowl",
+     "x": 415,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "conveyor",
+     "count": 1
+    },
+    {
+     "type": "trampoline",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "conveyor",
+     "x": 820,
+     "y": 360,
+     "dir": "left"
+    },
+    {
+     "type": "trampoline",
+     "x": 635,
+     "y": 678
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 860,
+     "y": 220
+    },
+    {
+     "x": 700,
+     "y": 375
+    },
+    {
+     "x": 480,
+     "y": 380
+    }
+   ],
+   "hintText": "Everything goes LEFT today! Point the belt's arrows toward my bowl, and put the trampoline between the belt and the wall."
+  },
+  {
+   "title": "The Great Berry Machine",
+   "goalType": "catch",
+   "goalText": "Build the whole chain: dominoes tap the berry, the trampoline bounces it, a plank slides it home!",
+   "teaches": "grand finale: marble starter + domino chain + trampoline + plank in one machine",
+   "fixed": [
+    {
+     "type": "plank",
+     "x": 210,
+     "y": 190,
+     "angle": 15
+    },
+    {
+     "type": "ball_marble",
+     "x": 150,
+     "y": 146
+    },
+    {
+     "type": "shelf",
+     "x": 520,
+     "y": 260,
+     "w": 460,
+     "h": 40
+    },
+    {
+     "type": "domino",
+     "x": 380,
+     "y": 212
+    },
+    {
+     "type": "domino",
+     "x": 420,
+     "y": 212
+    },
+    {
+     "type": "domino",
+     "x": 540,
+     "y": 212
+    },
+    {
+     "type": "domino",
+     "x": 580,
+     "y": 212
+    },
+    {
+     "type": "berry",
+     "x": 630,
+     "y": 223
+    },
+    {
+     "type": "bowl",
+     "x": 1165,
+     "y": 655
+    }
+   ],
+   "tray": [
+    {
+     "type": "domino",
+     "count": 2
+    },
+    {
+     "type": "trampoline",
+     "count": 1
+    },
+    {
+     "type": "plank",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "domino",
+     "x": 460,
+     "y": 212
+    },
+    {
+     "type": "domino",
+     "x": 500,
+     "y": 212
+    },
+    {
+     "type": "trampoline",
+     "x": 805,
+     "y": 678
+    },
+    {
+     "type": "plank",
+     "x": 960,
+     "y": 420,
+     "angle": 15
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 350,
+     "y": 205
+    },
+    {
+     "x": 850,
+     "y": 295
+    },
+    {
+     "x": 1090,
+     "y": 455
+    }
+   ],
+   "hintText": "Follow the story! My marble tips the dominoes, the last one nudges the berry off the table, the trampoline bounces it sky-high, and your tilted plank slides it into the bowl. Fill the domino gap first!"
+  }
+ ],
+ "notes": "Levels 1-6 each teach exactly one part in the required order (plank, trampoline, seesaw+marble, fan, dominoes, conveyor) using almost-built contraptions with one obvious gap, gentle 8-15 degree slopes, and wide targets. Level 7 hands over the last solo toy (bumper) as a playful breather, and levels 8-9 introduce the two new fixtures \u2014 balloon-into-spikes popping and the bucket funnel \u2014 each still needing only a single tray part. Levels 10-13 combine two ideas at a time with rising spatial reasoning: an arc over a wall plus a landing ramp, the insight that fans move beach balls but not berries, twin fans converging from both sides, and a full right-to-left direction reversal. Level 14 is the four-part grand machine replaying the campaign's whole vocabulary (marble starter, domino gap, trampoline bounce, plank slide) in one chain reaction. Robustness was engineered throughout: backstop-wall funnels guarantee the trickiest trampoline catches (levels 2 and 13), bells with their generous 46-58px contact radius are reserved for the wildest launchers (seesaw fling, bumper rocket), a guard wall in Berry Express prevents self-solving without the belt, final drops into bowls are short and near-vertical, and every failed run visibly shows the child where the missing part belongs. Goal mix: 9 catch, 3 bell, 2 pop; all trajectories were re-derived from the stated physics (g about 970 px/s2, 110% trampoline return, 280px fan reach, berry y = surface top minus 17) with landing points kept near the center of every target."
+}

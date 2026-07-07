@@ -1,0 +1,925 @@
+{
+ "levels": [
+  {
+   "title": "Roll to the Bowl",
+   "goalType": "catch",
+   "goalText": "Help the berry roll into Lory's bowl!",
+   "teaches": "plank: a tilted plank is a ramp",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 180,
+     "y": 220,
+     "w": 260,
+     "h": 40,
+     "angle": 6
+    },
+    {
+     "type": "berry",
+     "x": 90,
+     "y": 174
+    },
+    {
+     "type": "bowl",
+     "x": 620,
+     "y": 660
+    }
+   ],
+   "tray": [
+    {
+     "type": "plank",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "plank",
+     "x": 380,
+     "y": 360,
+     "angle": 10
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 330,
+     "y": 290
+    },
+    {
+     "x": 430,
+     "y": 350
+    },
+    {
+     "x": 560,
+     "y": 540
+    }
+   ],
+   "hintText": "The berry falls off the shelf right there... tilt your plank downhill toward my bowl and let it roll!"
+  },
+  {
+   "title": "Boing!",
+   "goalType": "bell",
+   "goalText": "Bounce the berry up to ring the bell!",
+   "teaches": "trampoline: bounces a falling ball back up high",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 240,
+     "y": 190,
+     "w": 160,
+     "h": 40,
+     "angle": 5
+    },
+    {
+     "type": "berry",
+     "x": 185,
+     "y": 149
+    },
+    {
+     "type": "bell",
+     "x": 505,
+     "y": 255
+    }
+   ],
+   "tray": [
+    {
+     "type": "trampoline",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "trampoline",
+     "x": 450,
+     "y": 560
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 330,
+     "y": 300
+    },
+    {
+     "x": 450,
+     "y": 480
+    },
+    {
+     "x": 490,
+     "y": 330
+    }
+   ],
+   "hintText": "Trampolines love falling berries! Put it right under where the berry lands, and BOING \u2014 up to the bell!"
+  },
+  {
+   "title": "Tickle the Spikes",
+   "goalType": "pop",
+   "goalText": "Pop the balloon on the spiky spikes!",
+   "teaches": "fan: wind pushes floating balloons sideways",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 480,
+     "y": 200,
+     "w": 400,
+     "h": 40
+    },
+    {
+     "type": "spikes",
+     "x": 500,
+     "y": 232,
+     "angle": 180
+    },
+    {
+     "type": "balloon_goal",
+     "x": 340,
+     "y": 580
+    }
+   ],
+   "tray": [
+    {
+     "type": "fan",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "fan",
+     "x": 260,
+     "y": 248,
+     "dir": "right"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 340,
+     "y": 440
+    },
+    {
+     "x": 340,
+     "y": 300
+    },
+    {
+     "x": 430,
+     "y": 246
+    }
+   ],
+   "hintText": "The balloon floats up and bumps the ceiling. My fan can blow it along \u2014 point the wind at the spikes!"
+  },
+  {
+   "title": "Funnel Fun",
+   "goalType": "catch",
+   "goalText": "Catch the flying berry and drop it in the bowl!",
+   "teaches": "bucket: catches a messy fall and drops it straight down",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 220,
+     "y": 240,
+     "w": 240,
+     "h": 40,
+     "angle": 8
+    },
+    {
+     "type": "berry",
+     "x": 130,
+     "y": 191
+    },
+    {
+     "type": "bowl",
+     "x": 470,
+     "y": 660
+    }
+   ],
+   "tray": [
+    {
+     "type": "bucket",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "bucket",
+     "x": 470,
+     "y": 420
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 360,
+     "y": 280
+    },
+    {
+     "x": 470,
+     "y": 370
+    },
+    {
+     "x": 470,
+     "y": 560
+    }
+   ],
+   "hintText": "That berry flies all wobbly! My bucket has a wide mouth \u2014 catch it up high, and it drops straight down into the bowl."
+  },
+  {
+   "title": "Domino Parade",
+   "goalType": "bell",
+   "goalText": "Fill the gap so the dominoes topple all the way to the bell!",
+   "teaches": "domino: chains topple when spaced 30-45px apart",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 640,
+     "y": 620,
+     "w": 500,
+     "h": 40
+    },
+    {
+     "type": "shelf",
+     "x": 200,
+     "y": 300,
+     "w": 200,
+     "h": 40,
+     "angle": 8
+    },
+    {
+     "type": "berry",
+     "x": 130,
+     "y": 254
+    },
+    {
+     "type": "domino",
+     "x": 520,
+     "y": 572
+    },
+    {
+     "type": "domino",
+     "x": 560,
+     "y": 572
+    },
+    {
+     "type": "domino",
+     "x": 720,
+     "y": 572
+    },
+    {
+     "type": "bell",
+     "x": 778,
+     "y": 570
+    }
+   ],
+   "tray": [
+    {
+     "type": "domino",
+     "count": 3
+    }
+   ],
+   "solution": [
+    {
+     "type": "domino",
+     "x": 600,
+     "y": 572
+    },
+    {
+     "type": "domino",
+     "x": 640,
+     "y": 572
+    },
+    {
+     "type": "domino",
+     "x": 680,
+     "y": 572
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 350,
+     "y": 420
+    },
+    {
+     "x": 560,
+     "y": 540
+    },
+    {
+     "x": 730,
+     "y": 540
+    }
+   ],
+   "hintText": "Uh oh, someone took three dominoes from my parade! Stand them in the gap \u2014 not too far apart \u2014 so the topple keeps going."
+  },
+  {
+   "title": "Heavy Helper",
+   "goalType": "bell",
+   "goalText": "Drop the heavy marble to fling the berry up to the bell!",
+   "teaches": "seesaw: a heavy thing on one end flings a light thing up",
+   "fixed": [
+    {
+     "type": "wall",
+     "x": 500,
+     "y": 650,
+     "w": 40,
+     "h": 90
+    },
+    {
+     "type": "seesaw",
+     "x": 500,
+     "y": 600
+    },
+    {
+     "type": "berry",
+     "x": 400,
+     "y": 615
+    },
+    {
+     "type": "bell",
+     "x": 400,
+     "y": 310
+    }
+   ],
+   "tray": [
+    {
+     "type": "ball_marble",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "ball_marble",
+     "x": 605,
+     "y": 220
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 605,
+     "y": 400
+    },
+    {
+     "x": 400,
+     "y": 480
+    },
+    {
+     "x": 400,
+     "y": 360
+    }
+   ],
+   "hintText": "The berry is waiting on my seesaw. Hold the marble high above the OTHER end and let go \u2014 WHEE, up she goes!"
+  },
+  {
+   "title": "Berry Express",
+   "goalType": "catch",
+   "goalText": "Give the berry a ride on the moving belt to the bowl!",
+   "teaches": "conveyor: carries resting things sideways",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 200,
+     "y": 260,
+     "w": 200,
+     "h": 40,
+     "angle": 6
+    },
+    {
+     "type": "berry",
+     "x": 140,
+     "y": 218
+    },
+    {
+     "type": "bucket",
+     "x": 380,
+     "y": 340
+    },
+    {
+     "type": "bowl",
+     "x": 555,
+     "y": 660
+    }
+   ],
+   "tray": [
+    {
+     "type": "conveyor",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "conveyor",
+     "x": 430,
+     "y": 500,
+     "dir": "right"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 330,
+     "y": 290
+    },
+    {
+     "x": 380,
+     "y": 430
+    },
+    {
+     "x": 520,
+     "y": 560
+    }
+   ],
+   "hintText": "The bucket drops the berry straight down \u2014 plop! A berry on flat ground just sits there... unless the ground MOVES. All aboard the belt!"
+  },
+  {
+   "title": "Balloon Boost",
+   "goalType": "catch",
+   "goalText": "Tip the seesaw so the berry rolls into the bowl!",
+   "teaches": "balloon: floats up and pushes light things from below",
+   "fixed": [
+    {
+     "type": "wall",
+     "x": 500,
+     "y": 580,
+     "w": 40,
+     "h": 220
+    },
+    {
+     "type": "seesaw",
+     "x": 500,
+     "y": 460
+    },
+    {
+     "type": "berry",
+     "x": 405,
+     "y": 440
+    },
+    {
+     "type": "bowl",
+     "x": 770,
+     "y": 660
+    }
+   ],
+   "tray": [
+    {
+     "type": "balloon",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "balloon",
+     "x": 395,
+     "y": 625
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 450,
+     "y": 430
+    },
+    {
+     "x": 620,
+     "y": 470
+    },
+    {
+     "x": 730,
+     "y": 570
+    }
+   ],
+   "hintText": "Balloons push UP as they float! Let one go under the low end of the seesaw and watch the berry roll the other way."
+  },
+  {
+   "title": "Balloon Round-Up",
+   "goalType": "pop",
+   "goalText": "Blow BOTH balloons into the middle spikes!",
+   "teaches": "combo: two fans, one from each side",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 640,
+     "y": 100,
+     "w": 1200,
+     "h": 40
+    },
+    {
+     "type": "spikes",
+     "x": 620,
+     "y": 132,
+     "angle": 180
+    },
+    {
+     "type": "spikes",
+     "x": 680,
+     "y": 132,
+     "angle": 180
+    },
+    {
+     "type": "balloon_goal",
+     "x": 350,
+     "y": 600
+    },
+    {
+     "type": "balloon_goal",
+     "x": 900,
+     "y": 600
+    }
+   ],
+   "tray": [
+    {
+     "type": "fan",
+     "count": 2
+    }
+   ],
+   "solution": [
+    {
+     "type": "fan",
+     "x": 330,
+     "y": 158,
+     "dir": "right"
+    },
+    {
+     "type": "fan",
+     "x": 950,
+     "y": 158,
+     "dir": "left"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 350,
+     "y": 400
+    },
+    {
+     "x": 500,
+     "y": 150
+    },
+    {
+     "x": 820,
+     "y": 150
+    }
+   ],
+   "hintText": "Two balloons, one spiky spot in the middle! Point your fans toward each other so both balloons slide along the ceiling to the spikes."
+  },
+  {
+   "title": "Over the Wall",
+   "goalType": "catch",
+   "goalText": "Bounce the berry over the big wall and into the bowl!",
+   "teaches": "combo: trampoline to clear a wall, plank to land the catch",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 170,
+     "y": 240,
+     "w": 200,
+     "h": 40,
+     "angle": 6
+    },
+    {
+     "type": "berry",
+     "x": 110,
+     "y": 202
+    },
+    {
+     "type": "wall",
+     "x": 620,
+     "y": 480,
+     "w": 40,
+     "h": 420
+    },
+    {
+     "type": "bowl",
+     "x": 880,
+     "y": 660
+    }
+   ],
+   "tray": [
+    {
+     "type": "trampoline",
+     "count": 1
+    },
+    {
+     "type": "plank",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "trampoline",
+     "x": 430,
+     "y": 580
+    },
+    {
+     "type": "plank",
+     "x": 770,
+     "y": 600,
+     "angle": 12
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 300,
+     "y": 350
+    },
+    {
+     "x": 575,
+     "y": 190
+    },
+    {
+     "x": 820,
+     "y": 585
+    }
+   ],
+   "hintText": "That wall is TALL! Bounce the berry high enough to fly over it, then give it a little slide on the other side so it rolls into the bowl."
+  },
+  {
+   "title": "Marble Catapult",
+   "goalType": "bell",
+   "goalText": "Roll the marble onto the seesaw to launch the berry at the bell!",
+   "teaches": "combo: aim a rolling marble to power a seesaw fling",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 240,
+     "y": 220,
+     "w": 200,
+     "h": 40,
+     "angle": 8
+    },
+    {
+     "type": "wall",
+     "x": 700,
+     "y": 650,
+     "w": 40,
+     "h": 90
+    },
+    {
+     "type": "seesaw",
+     "x": 700,
+     "y": 600
+    },
+    {
+     "type": "berry",
+     "x": 600,
+     "y": 615
+    },
+    {
+     "type": "bell",
+     "x": 600,
+     "y": 310
+    }
+   ],
+   "tray": [
+    {
+     "type": "ball_marble",
+     "count": 1
+    },
+    {
+     "type": "plank",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "ball_marble",
+     "x": 150,
+     "y": 172
+    },
+    {
+     "type": "plank",
+     "x": 520,
+     "y": 380,
+     "angle": 15
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 480,
+     "y": 350
+    },
+    {
+     "x": 730,
+     "y": 500
+    },
+    {
+     "x": 600,
+     "y": 380
+    }
+   ],
+   "hintText": "Start the marble on the high shelf so it gets rolling, then build a slide so it lands SPLAT on the seesaw's empty end. Berry, meet bell!"
+  },
+  {
+   "title": "Beach Ball Bowling",
+   "goalType": "catch",
+   "goalText": "The wind can't move the berry... but it can move something that can!",
+   "teaches": "insight: fans push light balls, and light balls push the berry",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 600,
+     "y": 300,
+     "w": 300,
+     "h": 40
+    },
+    {
+     "type": "berry",
+     "x": 700,
+     "y": 264
+    },
+    {
+     "type": "bowl",
+     "x": 850,
+     "y": 660
+    }
+   ],
+   "tray": [
+    {
+     "type": "fan",
+     "count": 1
+    },
+    {
+     "type": "ball_beach",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "ball_beach",
+     "x": 500,
+     "y": 250
+    },
+    {
+     "type": "fan",
+     "x": 390,
+     "y": 250,
+     "dir": "right"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 600,
+     "y": 240
+    },
+    {
+     "x": 770,
+     "y": 350
+    },
+    {
+     "x": 840,
+     "y": 560
+    }
+   ],
+   "hintText": "My fan is too gentle to budge a berry. But a beach ball loves wind! Blow the beach ball so it bowls the berry right off the edge."
+  },
+  {
+   "title": "Zig-Zag Sky",
+   "goalType": "pop",
+   "goalText": "Steer the balloon right, then left, all the way to the spikes!",
+   "teaches": "combo: two-stage steering \u2014 out from under the ledge, then back along the ceiling",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 400,
+     "y": 420,
+     "w": 300,
+     "h": 30
+    },
+    {
+     "type": "shelf",
+     "x": 640,
+     "y": 100,
+     "w": 1200,
+     "h": 40
+    },
+    {
+     "type": "spikes",
+     "x": 490,
+     "y": 132,
+     "angle": 180
+    },
+    {
+     "type": "balloon_goal",
+     "x": 350,
+     "y": 600
+    }
+   ],
+   "tray": [
+    {
+     "type": "fan",
+     "count": 2
+    }
+   ],
+   "solution": [
+    {
+     "type": "fan",
+     "x": 240,
+     "y": 465,
+     "dir": "right"
+    },
+    {
+     "type": "fan",
+     "x": 780,
+     "y": 148,
+     "dir": "left"
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 450,
+     "y": 455
+    },
+    {
+     "x": 575,
+     "y": 300
+    },
+    {
+     "x": 530,
+     "y": 150
+    }
+   ],
+   "hintText": "The balloon is stuck under that ledge! First blow it out to the right so it can float up \u2014 then use another fan up top to send it back LEFT into the spikes. Zig, then zag!"
+  },
+  {
+   "title": "Lory's Grand Machine",
+   "goalType": "catch",
+   "goalText": "Bounce, ride, funnel \u2014 build the whole machine to deliver the berry!",
+   "teaches": "finale: chain a bounce over a wall into a belt ride into a funnel drop",
+   "fixed": [
+    {
+     "type": "shelf",
+     "x": 150,
+     "y": 200,
+     "w": 200,
+     "h": 40,
+     "angle": 6
+    },
+    {
+     "type": "berry",
+     "x": 90,
+     "y": 158
+    },
+    {
+     "type": "wall",
+     "x": 600,
+     "y": 480,
+     "w": 40,
+     "h": 420
+    },
+    {
+     "type": "spikes",
+     "x": 780,
+     "y": 678
+    },
+    {
+     "type": "spikes",
+     "x": 980,
+     "y": 678
+    },
+    {
+     "type": "bowl",
+     "x": 880,
+     "y": 660
+    }
+   ],
+   "tray": [
+    {
+     "type": "trampoline",
+     "count": 1
+    },
+    {
+     "type": "conveyor",
+     "count": 1
+    },
+    {
+     "type": "bucket",
+     "count": 1
+    }
+   ],
+   "solution": [
+    {
+     "type": "trampoline",
+     "x": 390,
+     "y": 560
+    },
+    {
+     "type": "conveyor",
+     "x": 700,
+     "y": 350,
+     "dir": "right"
+    },
+    {
+     "type": "bucket",
+     "x": 880,
+     "y": 470
+    }
+   ],
+   "sparkles": [
+    {
+     "x": 550,
+     "y": 180
+    },
+    {
+     "x": 700,
+     "y": 330
+    },
+    {
+     "x": 880,
+     "y": 560
+    }
+   ],
+   "hintText": "Our biggest machine yet! Bounce the berry over the wall, catch it up high on a moving belt, and let the bucket do the careful drop \u2014 right between those silly spikes into my bowl."
+  }
+ ],
+ "notes": "CONVENTIONS USED (apply these when loading the data): (1) x,y are object CENTERS. (2) angle is degrees, clockwise-positive, so a positive angle tilts a plank/shelf with its RIGHT end lower -> balls roll right; angle 180 on spikes means they hang pointing DOWN from a ceiling. (3) dir applies to fans and conveyors. (4) Floor-resting items sit slightly below the y=660 guideline on purpose: bowls at y=660 (assumed ~60px tall on the y=690 floor) and decorative floor spikes at y=678 (24px tall); everything else respects the bounds. (5) Bucket assumed ~120x90 with an open top near y-45 and a bottom hole that releases the ball straight down at the bucket's center x. All trajectories were sanity-checked with g ~= 970 px/s^2 (derived from '350px in 0.85s'), plank roll acceleration ~= g*sin(theta), and trampoline restitution 1.1x fall height; landing points have +/-40-60px slack against 110-130px-wide targets (bowl mouths, bucket mouths, trampoline beds, plank spans), so solutions tolerate ghost-placement wobble. DESIGN ARC: L1-L8 each teach one tray part with a one-gap contraption (plank ramp, trampoline bounce, fan-on-ceiling-balloon, bucket funnel, domino gap-fill, marble-powers-seesaw, conveyor-moves-what-won't-roll, balloon-lifts-seesaw). L9-L13 are two-part/two-idea combos with a single clean insight each: opposing fans herd two balloons to central spikes; trampoline-over-wall plus landing ramp; aim a rolling marble to power a catapult; fan can't move the berry but can move a beach ball that CAN (the game's best aha); two-stage zig-zag steering (blow right to escape a ledge, then left along the ceiling). L14 is a 5-beat finale (roll -> bounce over wall -> belt ride -> funnel -> bowl) using 3 part types. Goal-type mix: 7 catch, 4 bell, 3 pop. TUNING KNOBS if automated verification finds drift: the most sensitive numbers are bowl x in L1 (620), L10 (880) and L12 (850) \u2014 slide the bowl, not the solution; in L10/L14 the trampoline bed x (430/390) sets the whole arc, adjust it first; in L5 domino spacing is 40px (safe middle of the 30-45 window); in L2 the bell (505,255) sits on the rising leg of the bounce directly above-right of the trampoline \u2014 lower it toward y=300 for extra tolerance. Fans are always placed so their 280px reach overlaps the balloon's resting height under a ceiling/ledge (balloon center ~24px below the surface underside), which makes fan puzzles nearly placement-order independent along the wind axis."
+}
