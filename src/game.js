@@ -481,7 +481,7 @@
     // checked against all 24 levels). The button lives in CANVAS space, so
     // map its rect into board space through the camera.
     const half = Math.max(halfW, halfH);
-    const zoneX = (APP_W - (92 * uiBoost + 40) - cam.x) / cam.z;
+    const zoneX = (viewW - (92 * uiBoost + 40) - boardOX() - cam.x) / cam.z;
     const zoneY = (APP_H - 128 - 92 * uiBoost - 18 - cam.y) / cam.z;
     if (spec.x + half > zoneX && spec.y + half > zoneY) return true;
     // test against a sim WITHOUT the dragged part (S.sim is rebuilt at drag start)
@@ -773,7 +773,7 @@
   let cv, scale = 1;
   function canvasPos(e) {
     const r = cv.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (APP_W / r.width), y: (e.clientY - r.top) * ((R.BOARD_H + R.TRAY_H) / r.height) };
+    return { x: (e.clientX - r.left) * (viewW / r.width), y: (e.clientY - r.top) * ((R.BOARD_H + R.TRAY_H) / r.height) };
   }
 
   // ---------------------------------------------------------------------------
@@ -790,8 +790,9 @@
     if (cam.z === 1) { cam.x = 0; cam.y = 0; }
   }
   function resetCam() { cam.z = 1; cam.x = 0; cam.y = 0; }
-  // canvas point -> board point (tray coords are canvas coords, unaffected)
-  function toBoard(pt) { return { x: (pt.x - cam.x) / cam.z, y: (pt.y - cam.y) / cam.z }; }
+  // canvas point -> board point (tray coords are canvas coords, unaffected).
+  // boardOX() centers the 1280px board inside the full-bleed canvas.
+  function toBoard(pt) { return { x: (pt.x - boardOX() - cam.x) / cam.z, y: (pt.y - cam.y) / cam.z }; }
 
   const activePtrs = new Map(); // pointerId -> last canvas pos
   let pinch = null;             // {ids:[a,b], d0, mid0, cam0}
@@ -923,10 +924,11 @@
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       const z = pinch.cam0.z * (d / pinch.d0);
       // keep the board point that was under the fingers anchored to them
-      const bx = (pinch.mid0.x - pinch.cam0.x) / pinch.cam0.z;
+      const ox = boardOX();
+      const bx = (pinch.mid0.x - ox - pinch.cam0.x) / pinch.cam0.z;
       const by = (pinch.mid0.y - pinch.cam0.y) / pinch.cam0.z;
       cam.z = z;
-      cam.x = mid.x - bx * cam.z;
+      cam.x = mid.x - ox - bx * cam.z;
       cam.y = mid.y - by * cam.z;
       clampCam();
       return;
@@ -1076,13 +1078,26 @@
   // ---------------------------------------------------------------------------
   // layout scale
   // ---------------------------------------------------------------------------
-  let appScale = 1, uiBoost = 1;
+  let appScale = 1, uiBoost = 1, viewW = APP_W;
+  const boardOX = () => (viewW - APP_W) / 2;
   function layout() {
     const app = $('#app');
     // visualViewport tracks iOS Safari's collapsing bars; innerHeight lags it
     const vw = (window.visualViewport && window.visualViewport.width) || window.innerWidth;
     const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-    appScale = Math.min(vw / APP_W, vh / APP_H);
+    const sw = vw / APP_W, sh = vh / APP_H;
+    if (sw <= sh) {
+      // width-limited (desktop-ish window): classic centered board
+      appScale = sw;
+      viewW = APP_W;
+    } else {
+      // height-limited (phones/wide screens): full-bleed — widen the room so
+      // the canvas fills the screen; the 1280px board stays centered in it
+      appScale = sh;
+      viewW = Math.min(2100, Math.floor(vw / appScale));
+    }
+    app.style.width = viewW + 'px';
+    R.setView(viewW);
     app.style.transform = `translate(-50%, -50%) scale(${appScale})`;
     // Touch-target compensation: on small screens (phones) draw UI bigger so
     // physical tap sizes stay usable. 1 on desktop/iPad, up to 1.7 on phones.
@@ -1120,7 +1135,7 @@
         if (pt.y >= R.BOARD_H) return;
         const b = toBoard(pt);
         cam.z = cam.z * (e.deltaY > 0 ? 0.93 : 1.075);
-        cam.x = pt.x - b.x * cam.z;
+        cam.x = pt.x - boardOX() - b.x * cam.z;
         cam.y = pt.y - b.y * cam.z;
         clampCam();
         return;
@@ -1149,7 +1164,7 @@
 
   // tiny read-only debug handle (used by automated tests)
   window.__loryDebug = {
-    get state() { return { screen: S.screen, phase: S.phase, selection: S.selection, placements: S.placements.map(p => Object.assign({}, p)), tray: S.trayStock.map(t => Object.assign({}, t)), cam: Object.assign({}, cam) }; },
+    get state() { return { screen: S.screen, phase: S.phase, selection: S.selection, placements: S.placements.map(p => Object.assign({}, p)), tray: S.trayStock.map(t => Object.assign({}, t)), cam: Object.assign({}, cam), viewW, ox: boardOX() }; },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

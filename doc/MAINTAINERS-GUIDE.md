@@ -135,6 +135,16 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
   **placement dead zone** (a part there would be ungrabbable). Enforced in
   `game.js specInvalid()`; its size scales with `uiBoost` since the button
   grows on phones. No stored level solution uses that corner (verified).
+- **Full-bleed canvas**: when the screen is wider than the board's aspect
+  (phones in landscape, wide monitors), `layout()` widens the canvas —
+  `viewW = min(2100, vw/scale)` — instead of letterboxing. The room artwork
+  (wallpaper/floor/tray) fills `viewW`; the 1280px board stays centered at
+  offset `boardOX() = (viewW-1280)/2`, its ends marked by subtle wooden
+  posts. Renderer: `R.setView(viewW)` resizes the canvas + repaints the bg
+  cache; `draw()` translates by `ox + cam.x`. Input: `canvasPos` scales by
+  `viewW`; `toBoard()` subtracts `ox`. Physics world stays 1280 — this is
+  pure presentation. Desktop windows narrower than the board aspect keep
+  `viewW = 1280` (classic centered card).
 - **Camera (Tier-2 mobile)**: `game.js` owns `cam = {z, x, y}` (z 1..2.5,
   clamped so the board window stays covered; z < 1.04 snaps to exactly 1).
   Two fingers on the board pinch-zoom/pan in ANY phase (starting a pinch

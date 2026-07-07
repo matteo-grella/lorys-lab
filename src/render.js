@@ -17,6 +17,11 @@
   const TAU = Math.PI * 2;
 
   let cv, ctx, dpr = 1, bgCache = null;
+  // Full-bleed support: the canvas can be wider than the 1280px board (phones
+  // in landscape). The room artwork fills viewW; the board sits centered at
+  // offset ox. World/physics stay 1280 wide — this is presentation only.
+  let viewW = BOARD_W;
+  const boardOX = () => (viewW - BOARD_W) / 2;
   const anim = new Map();   // per-part animation state, keyed by part id
   const squash = new Map(); // bodyId -> {t, nx, ny, amt}
   let particles = [];
@@ -68,25 +73,25 @@
   // ---------------------------------------------------------------------------
   function paintBackground() {
     const off = document.createElement('canvas');
-    off.width = BOARD_W * dpr; off.height = (BOARD_H + TRAY_H) * dpr;
+    off.width = viewW * dpr; off.height = (BOARD_H + TRAY_H) * dpr;
     const c = off.getContext('2d');
     c.scale(dpr, dpr);
     const g = c.createLinearGradient(0, 0, 0, BOARD_H);
     g.addColorStop(0, C.wallCream); g.addColorStop(1, C.wallPeach);
-    c.fillStyle = g; c.fillRect(0, 0, BOARD_W, BOARD_H + TRAY_H);
+    c.fillStyle = g; c.fillRect(0, 0, viewW, BOARD_H + TRAY_H);
     // polka dots
     c.fillStyle = 'rgba(201,145,90,0.07)';
     for (let y = 0, row = 0; y < FLOOR_Y - 40; y += 32, row++) {
-      for (let x = (row % 2 ? 32 : 0); x < BOARD_W; x += 64) { circle(c, x, y, 3); c.fill(); }
+      for (let x = (row % 2 ? 32 : 0); x < viewW; x += 64) { circle(c, x, y, 3); c.fill(); }
     }
     // crayon doodle frames (decor, top area)
     c.save(); c.globalAlpha = 0.5;
-    for (const [fx, fy] of [[150, 60], [1050, 72]]) {
+    for (const [fx, fy] of [[150, 60], [viewW - 230, 72]]) {
       c.fillStyle = 'rgba(255,249,238,0.5)'; rr(c, fx - 44, fy - 34, 88, 68, 8); c.fill();
       c.strokeStyle = C.woodMid; c.lineWidth = 4; rr(c, fx - 44, fy - 34, 88, 68, 8); c.stroke();
       c.strokeStyle = 'rgba(140,122,107,0.4)'; c.lineWidth = 2.5;
       c.beginPath();
-      if (fx < 600) { // scribble sun
+      if (fx < viewW / 2) { // scribble sun
         c.arc(fx, fy, 14, 0, TAU);
         for (let i = 0; i < 8; i++) { const a = i * TAU / 8; c.moveTo(fx + Math.cos(a) * 18, fy + Math.sin(a) * 18); c.lineTo(fx + Math.cos(a) * 26, fy + Math.sin(a) * 26); }
       } else { // scribble bird
@@ -97,18 +102,29 @@
     }
     c.restore();
     // vignette
-    const vg = c.createRadialGradient(BOARD_W / 2, BOARD_H / 2, 300, BOARD_W / 2, BOARD_H / 2, 900);
+    const vg = c.createRadialGradient(viewW / 2, BOARD_H / 2, 300, viewW / 2, BOARD_H / 2, 900);
     vg.addColorStop(0, 'rgba(67,52,43,0)'); vg.addColorStop(1, 'rgba(67,52,43,0.05)');
-    c.fillStyle = vg; c.fillRect(0, 0, BOARD_W, BOARD_H);
+    c.fillStyle = vg; c.fillRect(0, 0, viewW, BOARD_H);
     // skirting + floor
     const skirtY = FLOOR_Y - 26;
-    c.fillStyle = C.woodLight; c.fillRect(0, FLOOR_Y, BOARD_W, BOARD_H - FLOOR_Y);
-    c.fillStyle = C.woodMid; c.fillRect(0, skirtY, BOARD_W, 26);
-    c.fillStyle = C.woodDark; c.fillRect(0, skirtY, BOARD_W, 3);
-    c.fillStyle = 'rgba(255,249,238,0.25)'; c.fillRect(0, skirtY + 4, BOARD_W, 1.5);
-    c.fillStyle = C.shadow; c.fillRect(0, FLOOR_Y, BOARD_W, 6);
+    c.fillStyle = C.woodLight; c.fillRect(0, FLOOR_Y, viewW, BOARD_H - FLOOR_Y);
+    c.fillStyle = C.woodMid; c.fillRect(0, skirtY, viewW, 26);
+    c.fillStyle = C.woodDark; c.fillRect(0, skirtY, viewW, 3);
+    c.fillStyle = 'rgba(255,249,238,0.25)'; c.fillRect(0, skirtY + 4, viewW, 1.5);
+    c.fillStyle = C.shadow; c.fillRect(0, FLOOR_Y, viewW, 6);
     c.strokeStyle = 'rgba(143,98,56,0.15)'; c.lineWidth = 1.5;
-    for (let x = 48; x < BOARD_W; x += 96) { c.beginPath(); c.moveTo(x, FLOOR_Y + 6); c.lineTo(x, BOARD_H); c.stroke(); }
+    for (let x = 48; x < viewW; x += 96) { c.beginPath(); c.moveTo(x, FLOOR_Y + 6); c.lineTo(x, BOARD_H); c.stroke(); }
+    // when the room is wider than the board, mark the bench ends with subtle
+    // wooden posts so the invisible physics walls read as intentional
+    if (viewW > BOARD_W + 4) {
+      const ox = boardOX();
+      c.fillStyle = 'rgba(201,145,90,0.4)';
+      rr(c, ox - 14, 60, 10, FLOOR_Y - 60, 5); c.fill();
+      rr(c, ox + BOARD_W + 4, 60, 10, FLOOR_Y - 60, 5); c.fill();
+      c.fillStyle = 'rgba(143,98,56,0.35)';
+      rr(c, ox - 14, 60, 10, 8, 4); c.fill();
+      rr(c, ox + BOARD_W + 4, 60, 10, 8, 4); c.fill();
+    }
     return off;
   }
 
@@ -1060,15 +1076,15 @@
     const y0 = BOARD_H;
     c.save();
     c.fillStyle = C.woodLight;
-    rr(c, -10, y0, BOARD_W + 20, TRAY_H + 10, 24); c.fill();
+    rr(c, -10, y0, viewW + 20, TRAY_H + 10, 24); c.fill();
     c.strokeStyle = C.woodDark; c.lineWidth = 2;
-    c.beginPath(); c.moveTo(0, y0 + 1); c.lineTo(BOARD_W, y0 + 1); c.stroke();
+    c.beginPath(); c.moveTo(0, y0 + 1); c.lineTo(viewW, y0 + 1); c.stroke();
     const wells = [];
     const n = tray.length;
-    const wellW = Math.min(88 * B, (BOARD_W - 30) / Math.max(n, 1));
+    const wellW = Math.min(88 * B, (viewW - 30) / Math.max(n, 1));
     const box = Math.min(68 * Math.min(B, 1.45), wellW - 6, TRAY_H - 8);
     const total = n * wellW;
-    let x = BOARD_W / 2 - total / 2;
+    let x = viewW / 2 - total / 2;
     c.font = '700 12px ui-rounded, system-ui, sans-serif';
     for (const item of tray) {
       const cx = x + wellW / 2, cy = y0 + TRAY_H / 2 + 4;
@@ -1133,15 +1149,17 @@
     stepParticles(dt);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, BOARD_W, BOARD_H + TRAY_H);
+    ctx.clearRect(0, 0, viewW, BOARD_H + TRAY_H);
 
     // camera: everything on the BOARD is drawn under this transform; the
     // tray (after restore) stays fixed. Pure view — physics is untouched.
+    // ox centers the 1280px board inside a possibly wider full-bleed canvas.
     const cam = frame.cam || { z: 1, x: 0, y: 0 };
+    const ox = boardOX();
     ctx.save();
-    ctx.translate(cam.x, cam.y);
+    ctx.translate(ox + cam.x, cam.y);
     ctx.scale(cam.z, cam.z);
-    ctx.drawImage(bgCache, 0, 0, BOARD_W, BOARD_H + TRAY_H);
+    ctx.drawImage(bgCache, -ox, 0, viewW, BOARD_H + TRAY_H);
 
     const o = { t, running };
 
@@ -1190,14 +1208,26 @@
   function init(canvas) {
     cv = canvas;
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    cv.width = BOARD_W * dpr;
-    cv.height = (BOARD_H + TRAY_H) * dpr;
     ctx = cv.getContext('2d');
+    setView(viewW, true);
+  }
+
+  // Resize the canvas for a full-bleed room wider than the board (phones in
+  // landscape). Repaints the background cache; cheap and only on layout change.
+  function setView(w, force) {
+    w = Math.round(w);
+    if (!force && w === viewW && bgCache) return;
+    viewW = w;
+    cv.width = viewW * dpr;
+    cv.height = (BOARD_H + TRAY_H) * dpr;
+    cv.style.width = viewW + 'px';
+    cv.style.height = (BOARD_H + TRAY_H) + 'px';
     bgCache = paintBackground();
   }
 
   window.LoryRender = {
-    init, draw, fx, handleEvents, drawLory, drawBubble, C,
+    init, draw, fx, handleEvents, drawLory, drawBubble, C, setView,
+    get viewW() { return viewW; },
     BOARD_W, BOARD_H, TRAY_H, FLOOR_Y,
     setJuice(b) { juicy = !!b; if (!juicy) for (const a of anim.values()) a.trail = []; },
     juice() { return juicy; },
