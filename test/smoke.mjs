@@ -576,6 +576,19 @@ function run(level, placements, seconds = 12, watch = null) {
   const shielded = Core.simulate(mk(true), [], { maxSeconds: 8, collectEvents: true });
   check('wall blocks the beam — balloon behind it survives',
     !shielded.won && shielded.events.some(e => e.type === 'laser'));
+  // the classic kid move: drop a ball ON the cannon. The trigger ball then
+  // rests on the lens — it must NOT eat the beam (point-blank punch-through).
+  const selfTrig = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'laser', x: 400, y: 660 },                // default: fires straight up
+      { type: 'ball_marble', x: 400, y: 560 },          // falls onto the lens
+      { type: 'balloon_goal', x: 400, y: 300 },         // high above, in the beam line
+    ],
+  };
+  const up = Core.simulate(selfTrig, [], { maxSeconds: 8, collectEvents: true });
+  check('ball resting on the lens does not block its own shot',
+    up.won && up.events.some(e => e.type === 'laser'), `t=${up.seconds}s`);
 }
 
 // 32. Laser as igniter: the beam lights a cold candle wick and ignites a

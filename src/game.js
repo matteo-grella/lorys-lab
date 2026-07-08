@@ -890,6 +890,7 @@
           const defs = Core.PART_DEFS[w.type];
           const spec = { type: w.type, x: Math.round(bpt.x), y: Math.round(bpt.y) };
           if (defs.dir) spec.dir = defs.dir[0];
+          if (w.type === 'laser') spec.angle = 90; // out of the tray it fires sideways, not up
           trayItem(w.type).count--;
           S.drag = { spec, from: 'tray', invalid: true, pointerId: e.pointerId };
           S.selection = null;

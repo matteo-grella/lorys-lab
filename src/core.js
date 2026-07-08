@@ -969,11 +969,15 @@
         const nx = Math.sin(cb.angle), ny = -Math.cos(cb.angle);
         const mz = { x: cb.position.x + nx * (m.h / 2 + 4), y: cb.position.y + ny * (m.h / 2 + 4) };
         let len = LASER_REACH;
+        // whatever is pressed right against the lens — usually the very body
+        // that triggered the shot — must not eat the beam: shoot straight
+        // through anything overlapping the first sample point
+        const pointBlank = Query.point(all, { x: mz.x + nx * 6, y: mz.y + ny * 6 });
         outer:
         for (let s = 6; s <= LASER_REACH; s += 6) {
           const pt = { x: mz.x + nx * s, y: mz.y + ny * s };
           for (const b of Query.point(all, pt)) {
-            if (b.isSensor) continue;
+            if (b.isSensor || pointBlank.includes(b)) continue;
             const mb = lab(b);
             if (mb && (mb.id === m.id || mb.poppable)) continue;
             len = s; break outer;
