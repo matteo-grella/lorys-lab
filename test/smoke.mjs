@@ -333,6 +333,31 @@ function run(level, placements, seconds = 12, watch = null) {
     !r2.won && r2.events.some(e => e.type === 'extinguish'), `settled=${r2.settled}`);
 }
 
+// 20b. A spraying hydrant is pending action: quiescence waits for water_off
+// (this is what keeps the sandbox autostop from cutting a fountain short).
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'hydrant', x: 300, y: 468, dir: 'right' },
+      { type: 'bell', x: 900, y: 200 },
+    ],
+  };
+  const sim = Core.createSim(level, [
+    { type: 'ball_marble', x: 290, y: 330 },   // bumps the valve open, rolls clear
+  ]);
+  let onAt = 0, offAt = 0;
+  while (sim.state.frames < 12 * 60 && !sim.state.settled) {
+    for (const e of sim.step()) {
+      if (e.type === 'water_on' && !onAt) onAt = sim.state.frames;
+      if (e.type === 'water_off') offAt = sim.state.frames;
+    }
+  }
+  check('spraying hydrant defers settle until the water stops',
+    onAt > 0 && offAt > onAt && sim.state.settled && sim.state.frames >= offAt + 100,
+    `on@${onAt}f off@${offAt}f settled@${sim.state.frames}f`);
+}
+
 // 21. Switch powers a fan only while something presses the plate.
 {
   const level = {

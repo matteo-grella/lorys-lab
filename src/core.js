@@ -884,9 +884,11 @@
     }
 
     function isQuiescent() {
-      // a burning fuse is pending action — never count the machine as stuck
+      // a burning fuse or a spraying hydrant is pending action — never count
+      // the machine as stuck while either is live
       for (const p of parts) {
         if (p.spec.type === 'fuse' && lab(p.bodies[0]).fuse.active) return false;
+        if (p.spec.type === 'hydrant' && lab(p.bodies[0]).hyd.active) return false;
       }
       let maxV = 0;
       for (const b of dynamicBodies()) {

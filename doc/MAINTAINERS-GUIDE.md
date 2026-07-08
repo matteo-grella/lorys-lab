@@ -90,7 +90,7 @@ lorys-lab/
 │                            path — the filename rotates when the artifact URL
 │                            has to be re-minted; check build.mjs for current)
 ├── test/
-│   ├── smoke.mjs            41 physics behaviour proofs (run in Node)
+│   ├── smoke.mjs            42 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
 ├── design/                  design-time documents (visual spec, audio spec,
@@ -291,8 +291,8 @@ Executed **before** each `Engine.update`:
   conveyor pairs → hydrant push+douse → fuse-interval advance → flame-point
   collection → flame effects (pop/ignite/relight/burn-rope) → scissors-rope
   intersection → fist cooldown. New events: `snip {cause:'blade'|'fire'}`,
-  `ignite`, `extinguish`, `switch_on/off`, `thwack`, `water_on/off`. A burning fuse suppresses
-  the quiescence detector (a pending delay is not "stuck"). The `'water'`
+  `ignite`, `extinguish`, `switch_on/off`, `thwack`, `water_on/off`. A burning fuse or a
+  spraying hydrant suppresses the quiescence detector (pending action is not "stuck"). The `'water'`
   audio loop is event-driven: `water_on`/`water_off` start/stop it inside
   audio.js `handleEvents` (NOT in game.js `startLoops`).
 - **Conveyor drive.** For each active collision pair involving a conveyor:
@@ -351,7 +351,10 @@ body with `isBerry` overlaps a `bowl_sensor`, `caughtFrames++`.
 **Quiescence ("stuck") detection**: after `t > 1.5 s`, if every dynamic body
 has speed < 0.25 px/f (angular velocity counts, scaled ×30) for **100
 consecutive frames**, `state.settled = true`. The game treats settled (or
-t > 45 s) as "try again" — except in the sandbox, which runs until stopped.
+t > 45 s) as "try again". The sandbox instead reads `quietFrames` directly
+and auto-stops the run back to edit mode after **150 quiet frames** (~2.5 s)
+— the ◼ button still stops it earlier. A spraying hydrant, like a burning
+fuse, suppresses the quiet counter (pending action is not "stuck").
 ⚠️ Slow-creeping mechanisms (long domino chains leaning quasi-statically) can
 trip this while still "working". Design fast mechanisms, or keep something
 moving (e.g. a ball bouncing on a trampoline resets the quiet counter).
@@ -528,14 +531,14 @@ new total) before you build.
 Run everything from the project root:
 
 ```bash
-node test/smoke.mjs      # 41 physics behaviour proofs — every part & interaction
+node test/smoke.mjs      # 42 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext
 node --check src/*.js    # syntax gate for every module
 node build.mjs           # regenerates dist/ (see §10)
 ```
 
-**Definition of green**: smoke N/N (currently 41/41), verify N/N (currently 24/24),
+**Definition of green**: smoke N/N (currently 42/42), verify N/N (currently 24/24),
 audio-shape passes, all `--check`s pass.
 
 ### Browser E2E (Playwright)
@@ -705,7 +708,8 @@ S.phase (game screen): 'edit' | 'run' | 'won'
   `S.placements` (array of specs) is the authoritative editor state.
 - **run**: fixed-step accumulator inside `frame()` (max 3 catch-up steps per
   rAF; accumulator clamped at 100 ms). Events go to audio + render. Win →
-  `onWin()`; settled/timeout (45 s) → `onStuck()` (except sandbox).
+  `onWin()`; settled/timeout (45 s) → `onStuck()`; the sandbox instead
+  auto-stops (plain `stopRun`) after 150 quiet frames (~2.5 s).
 - **won**: input frozen; `S.winTimer` (1.4 s) then shows the overlay.
   `stopRun()` clears BOTH 'run' and 'won' phases and cancels `winTimer` —
   this prevents two historical bugs (win card painting over level select;
@@ -781,7 +785,8 @@ silently. All shapes are defaulted on load — never assume fields exist.
   The title screen carries only a music toggle (`#tMusic`, labeled) next to
   Start fresh; sound effects toggle only in the in-game topbar (`#sfxBtn`).
 - **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (26 entries incl. the machine shop and
-  fixed-only parts); no stuck detection; win events celebrate (confetti +
+  fixed-only parts); no "try again" stuck flow, but the run auto-stops back
+  to edit after ~2.5 s of stillness (§4.4); win events celebrate (confetti +
   reset of `won/caughtFrames/bellRung`) but never end the run.
 - **Puzzle maker**: `S.pluckMode`. Flow: validate berry+bowl exist → taps
   toggle `spec._plucked` → 💾 opens the name dialog (Enter=save, Esc=cancel,
