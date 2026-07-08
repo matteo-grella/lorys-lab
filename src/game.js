@@ -797,8 +797,11 @@
   let pinch = null;             // {ids:[a,b], d0, mid0, cam0}
 
   function hitPlacement(pt) {
-    // topmost (last) placement whose body contains the point (with padding)
-    const bodies = S.sim.bodies().filter(b => b.plugin.lab && b.plugin.lab.placed && !b.isSensor);
+    // topmost (last) placement whose body contains the point (with padding);
+    // sensors are invisible helper zones — except the fuse, whose ONLY body
+    // is a sensor: it must stay tappable or it can never be edited again
+    const bodies = S.sim.bodies().filter(b => b.plugin.lab && b.plugin.lab.placed
+      && (!b.isSensor || b.plugin.lab.type === 'fuse'));
     const hits = Core.Matter.Query.point(bodies, pt);
     let body = hits[hits.length - 1];
     if (!body) {
