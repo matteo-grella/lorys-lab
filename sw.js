@@ -2,7 +2,7 @@
 // Strategy: NETWORK-FIRST for everything in ASSETS (so deploys show up on the
 // first online load), falling back to cache when offline. Bump the version on
 // each deploy anyway — it clears stale entries.
-const CACHE = 'lorys-lab-v14';
+const CACHE = 'lorys-lab-v15';
 const ASSETS = [
   '.', 'index.html', 'manifest.json', 'icon-180.png', 'icon-512.png',
   'vendor/matter.min.js', 'src/core.js', 'src/levels.js', 'src/audio.js',

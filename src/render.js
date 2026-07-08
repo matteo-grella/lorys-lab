@@ -788,12 +788,15 @@
     },
 
     laser(c, d, a, o, body) {
+      // reads as a ray-gun at ANY rotation: round turret (rotation-agnostic),
+      // tapered barrel with a flared muzzle dish, red tail knob at the back
       const lz = body ? body.plugin.lab.laz : { firing: 0, beamLen: 0 };
       const t = o ? o.t : 0;
       const firing = lz.firing > 0 && lz.beamLen > 0;
-      // beam first so the housing sits crisply on top of its root
+      const my = -d.h / 2; // muzzle line
+      // beam first so the cannon sits crisply on top of its root
       if (firing) {
-        const y1 = -d.h / 2 - 2, y2 = -d.h / 2 - lz.beamLen;
+        const y1 = my - 2, y2 = my - lz.beamLen;
         for (const [col, wdt] of [['rgba(232,86,63,0.25)', 11], ['rgba(255,120,90,0.6)', 5.5], ['#FFF3B0', 2.2]]) {
           c.strokeStyle = col; c.lineWidth = wdt; c.lineCap = 'round';
           c.beginPath(); c.moveTo(0, y1); c.lineTo(0, y2); c.stroke();
@@ -804,21 +807,31 @@
         c.fillStyle = C.paper; circle(c, 0, 0, 3); c.fill();
         c.restore();
       }
-      // feet
-      c.fillStyle = C.woodMid;
-      rr(c, -d.w / 2, d.h / 2 - 8, 14, 8, 3); c.fill();
-      rr(c, d.w / 2 - 14, d.h / 2 - 8, 14, 8, 3); c.fill();
-      // housing
-      c.fillStyle = C.loryBlue; rr(c, -d.w / 2 + 4, -d.h / 2 + 12, d.w - 8, d.h - 16, 8); c.fill();
-      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2 + 4, -d.h / 2 + 12, d.w - 8, d.h - 16, 8); c.stroke();
-      // barrel + lens (breathing charge light while armed, white-hot while firing)
-      c.fillStyle = C.blueDeep; rr(c, -8, -d.h / 2 - 2, 16, 16, 4); c.fill();
-      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -8, -d.h / 2 - 2, 16, 16, 4); c.stroke();
-      c.globalAlpha = firing ? 1 : 0.45 + 0.2 * Math.sin(t * 4 + (d.seed || 0));
+      // tail knob: tells the eye which end is the back
+      c.fillStyle = C.poppy; circle(c, 0, 25, 7); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, 0, 25, 7); c.stroke();
+      // long neck flaring into a ray-gun bell at the muzzle
+      c.fillStyle = C.blueDeep;
+      c.beginPath(); c.moveTo(-6, 8); c.lineTo(6, 8); c.lineTo(11, my + 4); c.lineTo(-11, my + 4); c.closePath(); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(-6, 8); c.lineTo(6, 8); c.lineTo(11, my + 4); c.lineTo(-11, my + 4); c.closePath(); c.stroke();
+      // stripe on the neck (charm detail)
+      c.strokeStyle = C.sunny; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(-8, my + 14); c.lineTo(8, my + 14); c.stroke();
+      // muzzle dish
+      c.fillStyle = C.loryBlue; rr(c, -13, my - 3, 26, 8, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -13, my - 3, 26, 8, 4); c.stroke();
+      // round turret at the back
+      const g = c.createRadialGradient(-5, 5, 3, 0, 10, 19);
+      g.addColorStop(0, '#6FA0EA'); g.addColorStop(1, C.loryBlue);
+      c.fillStyle = g; circle(c, 0, 10, 16); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, 0, 10, 16); c.stroke();
+      // star charm + lens (breathing charge light, white-hot while firing)
+      c.fillStyle = C.sunny; star4(c, 0, 10, 6.5, 0.2); c.fill();
+      c.globalAlpha = firing ? 1 : 0.5 + 0.2 * Math.sin(t * 4 + (d.seed || 0));
       c.fillStyle = firing ? '#FFF3B0' : C.sky;
-      circle(c, 0, -d.h / 2 + 2, 4.5); c.fill();
+      circle(c, 0, my + 1, 5); c.fill();
       c.globalAlpha = 1;
-      c.fillStyle = C.sunny; star4(c, 0, 6, 6, 0.2); c.fill();
     },
 
     sparkle(c, d, a, o) {

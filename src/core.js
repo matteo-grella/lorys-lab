@@ -37,7 +37,7 @@
     switch:      { w: 84,  h: 20,  static: true,  placeable: true },
     fist:        { w: 66,  h: 46,  static: true,  placeable: true, rot: true },
     match:       { w: 12,  h: 54,  static: true,  placeable: true, rot: true },
-    laser:       { w: 60,  h: 44,  static: true,  placeable: true, rot: true },
+    laser:       { w: 44,  h: 56,  static: true,  placeable: true, rot: true },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
