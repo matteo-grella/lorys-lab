@@ -254,6 +254,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     hydrant:     { w: 52,  h: 62,  static: true,  placeable: true, dir: ['right', 'left', 'up'] },
     switch:      { w: 84,  h: 20,  static: true,  placeable: true },
     fist:        { w: 66,  h: 46,  static: true,  placeable: true, rot: true },
+    match:       { w: 12,  h: 54,  static: true,  placeable: true, rot: true },
+    laser:       { w: 60,  h: 44,  static: true,  placeable: true, rot: true },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -276,7 +278,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     ball_beach: 'rubber', ball_marble: 'marble', berry: 'berry', magnet: 'magnet',
     balloon: 'balloon', balloon_goal: 'balloon', bell: 'bell', bowl: 'wood', spikes: 'wood',
     rope: 'wood', scissors: 'magnet', candle: 'wood', fuse: 'wood',
-    hydrant: 'magnet', switch: 'wood', fist: 'bumper',
+    hydrant: 'magnet', switch: 'wood', fist: 'bumper', match: 'wood', laser: 'magnet',
   };
 
   const FAN_REACH = 280;
@@ -296,6 +298,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   const SWITCH_WIRE_REACH = 260;    // links to the nearest fan/conveyor/magnet
   const FIST_LAUNCH = 15;           // punch speed straight up (px/frame)
   const FIST_COOLDOWN = 60;
+  const MATCH_FLARE_FRAMES = 150;   // a struck match burns ~2.5s, then it's spent
+  const LASER_REACH = 420;
+  const LASER_FIRE_FRAMES = 30;     // one trigger buys ~0.5s of beam
+  const LASER_COOLDOWN_FRAMES = 50;
 
   let nextId = 1;
 
@@ -337,6 +343,16 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     const vx = b.x - a.x, vy = b.y - a.y;
     const t = Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / (vx * vx + vy * vy || 1)));
     return Math.hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t));
+  }
+  // nearest sampled point of segment a1-a2 that comes within r of segment
+  // b1-b2, or null (conservative sampling, same spirit as segIntersectsOBB)
+  function segHitSeg(a1, a2, b1, b2, r) {
+    const steps = 24;
+    for (let i = 0; i <= steps; i++) {
+      const p = { x: a1.x + (a2.x - a1.x) * i / steps, y: a1.y + (a2.y - a1.y) * i / steps };
+      if (distPointSeg(p, b1, b2) <= r) return p;
+    }
+    return null;
   }
   // point on a fuse's long axis for parameter u in [0,1]
   function fusePoint(body, len, u) {
@@ -406,8 +422,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         break;
 
       case 'candle':
+        // spec.lit === false places it cold (lightable by any flame/laser);
+        // default stays lit so every existing level keeps its behaviour.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.1 }),
-          { candle: { lit: true } }));
+          { candle: { lit: spec.lit !== false } }));
         break;
 
       case 'fuse':
@@ -433,6 +451,22 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         // glove points after rotation.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.4, restitution: 0.1 }),
           { fist: { cooldown: 0 } }));
+        break;
+
+      case 'match':
+        // Strike-anywhere match: a decent bump flares the head into a real
+        // flame for MATCH_FLARE_FRAMES, then the match is spent for good.
+        // Rotatable so the head can point at whatever should catch fire.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.4, restitution: 0.1 }),
+          { match: { lit: false, timer: 0, dead: false } }));
+        break;
+
+      case 'laser':
+        // Toy laser cannon, rotatable 360°: fires along its local "up" when
+        // touched (or while a wired switch is pressed). The beam stops at the
+        // first solid body; see applyBehaviours for what it does on the way.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.3, restitution: 0.2 }),
+          { laz: { firing: 0, cooldown: 0, beamLen: 0 } }));
         break;
 
       case 'domino':
@@ -603,7 +637,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       const swBody = p.bodies[0];
       let best = null, bd = SWITCH_WIRE_REACH;
       for (const q of parts) {
-        if (!['fan', 'conveyor', 'magnet', 'hydrant'].includes(q.spec.type)) continue;
+        if (!['fan', 'conveyor', 'magnet', 'hydrant', 'laser'].includes(q.spec.type)) continue;
         const d = Math.hypot(q.bodies[0].position.x - swBody.position.x, q.bodies[0].position.y - swBody.position.y);
         if (d < bd) { bd = d; best = q; }
       }
@@ -707,6 +741,23 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
           }
         }
 
+        // Match strike: a decent bump anywhere on the stick flares the head.
+        for (const [ms, o] of [[a, b], [b, a]]) {
+          if (lab(ms).match && !o.isStatic && !o.isSensor && relSpeed >= 1.6) strikeMatch(ms);
+        }
+
+        // Laser trigger: any touch fires one beam burst (switch-wired
+        // cannons ignore touches — the switch decides).
+        for (const [lc, o] of [[a, b], [b, a]]) {
+          const meta = lab(lc), lz = meta.laz;
+          if (!lz || meta.switchControlled || o.isStatic || o.isSensor) continue;
+          if (lz.cooldown > 0 || lz.firing > 0) continue;
+          lz.firing = LASER_FIRE_FRAMES;
+          lz.cooldown = LASER_FIRE_FRAMES + LASER_COOLDOWN_FRAMES;
+          const nx = Math.sin(lc.angle), ny = -Math.cos(lc.angle);
+          state.events.push({ type: 'laser', x: lc.position.x + nx * (meta.h / 2 + 4), y: lc.position.y + ny * (meta.h / 2 + 4) });
+        }
+
         // Spring-loaded fist. Two triggers:
         //  - GLOVE side (local -y): punches the toucher itself, as before;
         //  - BACK plunger (local +y): fires the glove remotely, launching
@@ -783,6 +834,18 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     // --- machine-shop helpers -------------------------------------------------
     const rectContains = (r, p) => p.x >= r.min.x && p.x <= r.max.x && p.y >= r.min.y && p.y <= r.max.y;
     const flameTip = (body, h) => ({ x: body.position.x, y: body.position.y - h / 2 - 8 });
+    // the match head sits at the stick's local "up" end, wherever it points
+    const matchHead = (body, h) => ({
+      x: body.position.x + Math.sin(body.angle) * (h / 2 + 6),
+      y: body.position.y - Math.cos(body.angle) * (h / 2 + 6),
+    });
+    function strikeMatch(body) {
+      const m = lab(body), mm = m.match;
+      if (mm.lit || mm.dead) return;
+      mm.lit = true; mm.timer = MATCH_FLARE_FRAMES;
+      const head = matchHead(body, m.h);
+      state.events.push({ type: 'ignite', x: head.x, y: head.y });
+    }
     function ropeEnds(p) {
       const anchor = p.bodies[0], m = lab(anchor);
       if (!m.rope.attached) return null;
@@ -983,6 +1046,13 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
               cm.lit = false;
               state.events.push({ type: 'extinguish', x: tip.x, y: tip.y });
             }
+          } else if (q.spec.type === 'match') {
+            const mm = lab(q.bodies[0]).match;
+            const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
+            if (mm.lit && rectContains(region, head)) {
+              mm.lit = false; mm.dead = true; // a soaked match is spent
+              state.events.push({ type: 'extinguish', x: head.x, y: head.y });
+            }
           } else if (q.spec.type === 'fuse') {
             const fm = lab(q.bodies[0]).fuse;
             if (!fm.active) continue;
@@ -1010,11 +1080,26 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         if (fm.a <= 0 && fm.b >= 1) { fm.active = false; fm.dead = true; }
       }
 
-      // Collect live flame points: lit candles + burning fuse fronts.
+      // Burn down flaring matches; a spent match never lights again.
+      for (const p of parts) {
+        if (p.spec.type !== 'match') continue;
+        const mm = lab(p.bodies[0]).match;
+        if (!mm.lit) continue;
+        mm.timer--;
+        if (mm.timer <= 0) {
+          mm.lit = false; mm.dead = true;
+          const head = matchHead(p.bodies[0], lab(p.bodies[0]).h);
+          state.events.push({ type: 'extinguish', x: head.x, y: head.y });
+        }
+      }
+
+      // Collect live flame points: lit candles + flaring matches + fuse fronts.
       const flames = [];
       for (const p of parts) {
         if (p.spec.type === 'candle' && lab(p.bodies[0]).candle.lit) {
           flames.push(flameTip(p.bodies[0], lab(p.bodies[0]).h));
+        } else if (p.spec.type === 'match' && lab(p.bodies[0]).match.lit) {
+          flames.push(matchHead(p.bodies[0], lab(p.bodies[0]).h));
         } else if (p.spec.type === 'fuse') {
           const fm = lab(p.bodies[0]).fuse;
           if (!fm.active) continue;
@@ -1044,6 +1129,11 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
               cm.lit = true;
               state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
             }
+          } else if (q.spec.type === 'match') {
+            const mm = lab(q.bodies[0]).match;
+            const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
+            if (!mm.lit && !mm.dead && Math.hypot(head.x - f.x, head.y - f.y) < FLAME_R * 1.3)
+              strikeMatch(q.bodies[0]);
           } else if (q.spec.type === 'rope') {
             const ends = ropeEnds(q);
             if (ends && distPointSeg(f, ends[0], ends[1]) < 14) cutRope(q, f.x, f.y, 'fire');
@@ -1079,6 +1169,76 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         }
       }
 
+      // Laser cannons: while firing, march the beam to the first solid body;
+      // on the way it pops balloons, lights candles/matches/fuses, and burns
+      // ropes and tether strings. Sensors and balloons never block the beam.
+      for (const p of parts) {
+        if (p.spec.type !== 'laser') continue;
+        const cb = p.bodies[0], m = lab(cb), lz = m.laz;
+        if (m.switchControlled) {
+          if (m.poweredNow && lz.firing <= 0)
+            state.events.push({ type: 'laser', x: cb.position.x, y: cb.position.y });
+          lz.firing = m.poweredNow ? 2 : 0;
+        } else {
+          if (lz.cooldown > 0) lz.cooldown--;
+          if (lz.firing > 0) lz.firing--;
+        }
+        if (lz.firing <= 0) { lz.beamLen = 0; continue; }
+        const nx = Math.sin(cb.angle), ny = -Math.cos(cb.angle);
+        const mz = { x: cb.position.x + nx * (m.h / 2 + 4), y: cb.position.y + ny * (m.h / 2 + 4) };
+        let len = LASER_REACH;
+        outer:
+        for (let s = 6; s <= LASER_REACH; s += 6) {
+          const pt = { x: mz.x + nx * s, y: mz.y + ny * s };
+          for (const b of Query.point(all, pt)) {
+            if (b.isSensor) continue;
+            const mb = lab(b);
+            if (mb && (mb.id === m.id || mb.poppable)) continue;
+            len = s; break outer;
+          }
+        }
+        lz.beamLen = len; // renderer draws the beam from this
+        const end = { x: mz.x + nx * len, y: mz.y + ny * len };
+        for (const b of all) {
+          const mb = lab(b);
+          if (mb && mb.poppable && !mb.popped
+            && distPointSeg(b.position, mz, end) < (mb.r || 20) + 4) popBalloon(b);
+        }
+        for (const q of parts) {
+          if (q.spec.type === 'candle') {
+            const cm = lab(q.bodies[0]).candle;
+            const tip = flameTip(q.bodies[0], lab(q.bodies[0]).h);
+            if (!cm.lit && distPointSeg(tip, mz, end) < 20) {
+              cm.lit = true;
+              state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
+            }
+          } else if (q.spec.type === 'match') {
+            const mm = lab(q.bodies[0]).match;
+            const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
+            if (!mm.lit && !mm.dead && distPointSeg(head, mz, end) < 20)
+              strikeMatch(q.bodies[0]);
+          } else if (q.spec.type === 'fuse') {
+            const qb = q.bodies[0], fm = lab(qb).fuse;
+            if (fm.dead) continue;
+            for (let s = 0; s <= len; s += 6) {
+              const l = toLocal(qb, { x: mz.x + nx * s, y: mz.y + ny * s });
+              if (Math.abs(l.y) <= lab(qb).h / 2 + 6 && Math.abs(l.x) <= fm.len / 2 + 4) {
+                igniteFuse(fm, qb, Math.max(0, Math.min(1, (l.x + fm.len / 2) / fm.len)));
+                break;
+              }
+            }
+          } else if (q.spec.type === 'rope') {
+            const ends = ropeEnds(q);
+            const hit = ends && segHitSeg(mz, end, ends[0], ends[1], 8);
+            if (hit) cutRope(q, hit.x, hit.y, 'fire');
+          } else if (q.spec.type === 'balloon_goal') {
+            const ends = tetherEnds(q);
+            const hit = ends && segHitSeg(mz, end, ends[0], ends[1], 8);
+            if (hit) cutTether(q, hit.x, hit.y, 'fire');
+          }
+        }
+      }
+
       // Fist cooldown / punch animation timer.
       for (const p of parts) {
         if (p.spec.type !== 'fist') continue;
@@ -1102,9 +1262,13 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     }
 
     function isQuiescent() {
-      // a burning fuse is pending action — never count the machine as stuck
+      // pending action is never "stuck": a burning fuse, a flaring match,
+      // a spraying hydrant or a firing laser will still change the world
       for (const p of parts) {
         if (p.spec.type === 'fuse' && lab(p.bodies[0]).fuse.active) return false;
+        if (p.spec.type === 'match' && lab(p.bodies[0]).match.lit) return false;
+        if (p.spec.type === 'hydrant' && lab(p.bodies[0]).hyd.active) return false;
+        if (p.spec.type === 'laser' && lab(p.bodies[0]).laz.firing > 0) return false;
       }
       let maxV = 0;
       for (const b of dynamicBodies()) {
@@ -3269,6 +3433,15 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       o.frequency.exponentialRampToValueAtTime(60, t + 0.3); env(g.gain, t, 0.005, 0.15, 0.3);
       chain(o, lp, g, sfxBus); o.start(t);
       shot(o, t + 0.33, [o, lp, g]);
+    },
+    laser: function (t) { // laser cannon: classic descending PEW + bright zap
+      var r = rnd(0.92, 1.08);
+      var b = tone(t, 'sawtooth', 1500 * r, 0.16, 0.28, 0.002);
+      b.o.frequency.exponentialRampToValueAtTime(210 * r, t + 0.16);
+      var s = tone(t, 'square', 2200 * r, 0.05, 0.1, 0.001, rnd(-30, 30));
+      s.o.frequency.exponentialRampToValueAtTime(900 * r, t + 0.05);
+      shot(b.o, t + 0.19, b.nodes.concat(noiseHit(t, 0.02, 'highpass', 5000, null, 0.1)));
+      shot(s.o, t + 0.07, s.nodes);
     }
   };
 
@@ -3544,6 +3717,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         case 'snip': sfx('snip'); break;
         case 'snipclick': sfx('rotate'); break; // blade snap without a cut
         case 'thwack': sfx('thwack'); break;
+        case 'laser': sfx('laser'); break;
         case 'switch_on': sfx('switchOn'); break;
         case 'switch_off': sfx('switchOff'); break;
         case 'ignite': sfx('igniteFizz'); break;
@@ -4333,6 +4507,71 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       c.beginPath(); c.ellipse(-6, top - 13, 4, 2.5, -0.5, 0, TAU); c.fill();
     },
 
+    match(c, d, a, o, body) {
+      const mm = body ? body.plugin.lab.match : { lit: false, dead: false };
+      // wooden stick
+      c.fillStyle = C.woodLight; rr(c, -d.w / 2, -d.h / 2 + 10, d.w, d.h - 10, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, -d.h / 2 + 10, d.w, d.h - 10, 4); c.stroke();
+      // head: cherry red when fresh, charcoal once spent
+      c.fillStyle = mm.dead ? '#5A4A3E' : C.poppy;
+      c.beginPath(); c.ellipse(0, -d.h / 2 + 6, d.w / 2 + 3, 9, 0, 0, TAU); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(0, -d.h / 2 + 6, d.w / 2 + 3, 9, 0, 0, TAU); c.stroke();
+      if (!mm.dead && !mm.lit) { // shine charm on a fresh head
+        c.fillStyle = 'rgba(255,249,238,0.75)';
+        c.beginPath(); c.ellipse(-2.5, -d.h / 2 + 3, 2.4, 1.6, -0.5, 0, TAU); c.fill();
+      }
+      if (mm.lit) {
+        // flare: bigger, wilder flame than the candle's steady teardrop
+        const t = o ? o.t : 0;
+        const fl = Math.sin(t * 13 + (d.seed || 0)) * 2;
+        const g2 = c.createRadialGradient(fl * 0.3, -d.h / 2 - 6, 1, fl * 0.3, -d.h / 2 - 6, 14);
+        g2.addColorStop(0, '#FFF3B0'); g2.addColorStop(0.5, C.sunny); g2.addColorStop(1, 'rgba(255,142,60,0)');
+        c.fillStyle = g2;
+        c.beginPath(); c.ellipse(fl * 0.5, -d.h / 2 - 6, 8 + fl * 0.6, 13, fl * 0.06, 0, TAU); c.fill();
+        c.fillStyle = C.tangerine;
+        c.beginPath(); c.ellipse(fl * 0.35, -d.h / 2 - 3, 3.2, 5.5, 0, 0, TAU); c.fill();
+      } else if (mm.dead) {
+        c.strokeStyle = 'rgba(140,122,107,0.6)'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(0, -d.h / 2 - 2);
+        c.quadraticCurveTo(4, -d.h / 2 - 9, 1, -d.h / 2 - 15); c.stroke(); // smoke wisp
+      }
+    },
+
+    laser(c, d, a, o, body) {
+      const lz = body ? body.plugin.lab.laz : { firing: 0, beamLen: 0 };
+      const t = o ? o.t : 0;
+      const firing = lz.firing > 0 && lz.beamLen > 0;
+      // beam first so the housing sits crisply on top of its root
+      if (firing) {
+        const y1 = -d.h / 2 - 2, y2 = -d.h / 2 - lz.beamLen;
+        for (const [col, wdt] of [['rgba(232,86,63,0.25)', 11], ['rgba(255,120,90,0.6)', 5.5], ['#FFF3B0', 2.2]]) {
+          c.strokeStyle = col; c.lineWidth = wdt; c.lineCap = 'round';
+          c.beginPath(); c.moveTo(0, y1); c.lineTo(0, y2); c.stroke();
+        }
+        // sizzling impact burst where the beam lands
+        c.save(); c.translate(0, y2); c.rotate((t * 9) % TAU);
+        c.fillStyle = C.sunny; star4(c, 0, 0, 9 + Math.sin(t * 21) * 2, 0); c.fill();
+        c.fillStyle = C.paper; circle(c, 0, 0, 3); c.fill();
+        c.restore();
+      }
+      // feet
+      c.fillStyle = C.woodMid;
+      rr(c, -d.w / 2, d.h / 2 - 8, 14, 8, 3); c.fill();
+      rr(c, d.w / 2 - 14, d.h / 2 - 8, 14, 8, 3); c.fill();
+      // housing
+      c.fillStyle = C.loryBlue; rr(c, -d.w / 2 + 4, -d.h / 2 + 12, d.w - 8, d.h - 16, 8); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2 + 4, -d.h / 2 + 12, d.w - 8, d.h - 16, 8); c.stroke();
+      // barrel + lens (breathing charge light while armed, white-hot while firing)
+      c.fillStyle = C.blueDeep; rr(c, -8, -d.h / 2 - 2, 16, 16, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -8, -d.h / 2 - 2, 16, 16, 4); c.stroke();
+      c.globalAlpha = firing ? 1 : 0.45 + 0.2 * Math.sin(t * 4 + (d.seed || 0));
+      c.fillStyle = firing ? '#FFF3B0' : C.sky;
+      circle(c, 0, -d.h / 2 + 2, 4.5); c.fill();
+      c.globalAlpha = 1;
+      c.fillStyle = C.sunny; star4(c, 0, 6, 6, 0.2); c.fill();
+    },
+
     sparkle(c, d, a, o) {
       const t = o ? o.t : 0;
       const tw = 0.75 + 0.25 * Math.sin(t * TAU / 0.9 + (d.seed || 0));
@@ -4594,6 +4833,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
           fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 5); fx.poof(e.x, e.y + 10, 4);
           if (e.bodyId != null) squash.set(e.bodyId, { t: 0, nx: 0, ny: 1, amt: 0.3 });
           break;
+        case 'laser': fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 4); break;
         case 'win': shakeT = 0; break;
       }
     }
@@ -4953,6 +5193,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     const defsBtns = [];
     if (defs.rot) defsBtns.push({ id: 'rotl', icon: '⟲', col: C.loryBlue }, { id: 'rotr', icon: '⟳', col: C.loryBlue });
     if (defs.dir) defsBtns.push({ id: 'flip', icon: '⇄', col: C.tangerine });
+    // candles start lit or cold — the button icon shows what tapping DOES
+    if (sel.type === 'candle') defsBtns.push({ id: 'lit', icon: sel.lit === false ? '🔥' : '💨', col: C.tangerine });
     defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
     const pitch = 54 * B;
     let total = defsBtns.length * pitch - 10 * B + 14 * B;
@@ -4977,7 +5219,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   }
 
   // tray. boost enlarges wells on small screens where the level's tray is
-  // small enough to still fit (the 19-well sandbox stays width-bound).
+  // small enough to still fit (the 28-well sandbox stays width-bound).
   function drawTray(c, tray, o, dragType, boost) {
     const B = boost || 1;
     const y0 = BOARD_H;
@@ -5245,7 +5487,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   const SANDBOX_TRAY = [
     ['plank', 8], ['shelf', 4], ['wall', 2], ['trampoline', 3], ['seesaw', 2], ['fan', 3],
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
-    ['rope', 3], ['scissors', 2], ['candle', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2],
+    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
     ['balloon_goal', 4], ['spikes', 2],
   ];
@@ -5673,6 +5915,13 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     rebuildSim();
     A.sfx('rotate');
   }
+  function toggleLitSelection() {
+    const p = S.placements[S.selection];
+    if (!p || p.type !== 'candle') return;
+    p.lit = p.lit === false;        // cold -> lit, lit (default) -> cold
+    rebuildSim();
+    A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
+  }
 
   // ---------------------------------------------------------------------------
   // puzzle maker (sandbox): pluck parts into the tray, then save
@@ -5946,8 +6195,11 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   let pinch = null;             // {ids:[a,b], d0, mid0, cam0}
 
   function hitPlacement(pt) {
-    // topmost (last) placement whose body contains the point (with padding)
-    const bodies = S.sim.bodies().filter(b => b.plugin.lab && b.plugin.lab.placed && !b.isSensor);
+    // topmost (last) placement whose body contains the point (with padding);
+    // sensors are invisible helper zones — except the fuse, whose ONLY body
+    // is a sensor: it must stay tappable or it can never be edited again
+    const bodies = S.sim.bodies().filter(b => b.plugin.lab && b.plugin.lab.placed
+      && (!b.isSensor || b.plugin.lab.type === 'fuse'));
     const hits = Core.Matter.Query.point(bodies, pt);
     let body = hits[hits.length - 1];
     if (!body) {
@@ -6017,6 +6269,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         if (b.id === 'rotl') rotateSelection(-1);
         if (b.id === 'rotr') rotateSelection(1);
         if (b.id === 'flip') flipSelection();
+        if (b.id === 'lit') toggleLitSelection();
         if (b.id === 'del') { A.sfx('pickup'); removePlacement(S.selection); }
         return;
       }
@@ -6192,8 +6445,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
           }
         }
         if (S.sim.state.won) { onWin(); break; }
-        // sandbox has no goal: let it run until the player presses stop
-        if (!S.sandbox && (S.sim.state.settled || S.sim.state.t > 45)) { onStuck(); break; }
+        if (S.sandbox) {
+          // sandbox autostop: nothing has moved for ~2.5s — the show is over
+          if (S.sim.state.quietFrames >= 150) { stopRun(true); break; }
+        } else if (S.sim.state.settled || S.sim.state.t > 45) { onStuck(); break; }
       }
       if (S.runAcc > 100) S.runAcc = 0;
     }

@@ -485,6 +485,152 @@ function run(level, placements, seconds = 12, watch = null) {
     r.won && r.events.some(e => e.type === 'thwack'), `t=${r.seconds}s`);
 }
 
+// 28. Candle initial state: spec.lit === false places it cold — it must not
+//     act as a flame (control), and any passing flame lights it back.
+{
+  const level = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'candle', x: 470, y: 400, lit: false },
+      { type: 'fuse', x: 520, y: 366 },
+      { type: 'balloon_goal', x: 616, y: 360 },
+    ],
+  };
+  const cold = Core.simulate(level, [], { maxSeconds: 8 });
+  check('unlit candle is not a flame (fuse never lights, balloon lives)', !cold.won && cold.settled);
+  // lit candle -> fuse -> the burning front reaches the cold candle's wick
+  const level2 = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'candle', x: 420, y: 400 },              // lit: ignites the fuse
+      { type: 'fuse', x: 470, y: 366 },                // burns to its right end (535, 366)
+      { type: 'candle', x: 535, y: 403, lit: false },  // wick tip right there
+      { type: 'bell', x: 1200, y: 100 },
+    ],
+  };
+  const sim = Core.createSim(level2, []);
+  for (let f = 0; f < 400; f++) sim.step();
+  const coldCandle = sim.parts.find(p => p.spec.type === 'candle' && p.spec.lit === false);
+  check('fuse fire relights the placed-cold candle', coldCandle.bodies[0].plugin.lab.candle.lit === true);
+}
+
+// 29. Match: a bump strikes it, the flare lights a cold candle beside it,
+//     then the match burns out spent (one-shot).
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'match', x: 500, y: 663 },
+      { type: 'candle', x: 522, y: 661, lit: false },
+      { type: 'bell', x: 1200, y: 100 },
+    ],
+  };
+  const idle = Core.simulate(level, [], { maxSeconds: 6 });
+  check('fresh match waits (nothing strikes it)', !idle.won && idle.settled);
+  const sim = Core.createSim(level, [{ type: 'ball_marble', x: 500, y: 560 }]);
+  let ignites = 0, burnout = false;
+  for (let f = 0; f < 400; f++) for (const e of sim.step()) {
+    if (e.type === 'ignite') ignites++;
+    if (e.type === 'extinguish') burnout = true;
+  }
+  const mm = sim.parts.find(p => p.spec.type === 'match').bodies[0].plugin.lab.match;
+  const cm = sim.parts.find(p => p.spec.type === 'candle').bodies[0].plugin.lab.candle;
+  check('struck match lights the cold candle, then burns out spent',
+    ignites >= 2 && cm.lit && burnout && mm.dead && !mm.lit, `ignites=${ignites}`);
+}
+
+// 30. A soaked match is spent: hydrant water kills the flare for good.
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'match', x: 500, y: 663 },
+      { type: 'hydrant', x: 300, y: 659, dir: 'right' },
+      { type: 'ball_beach', x: 300, y: 560 },   // wakes the hydrant
+      { type: 'ball_marble', x: 500, y: 560 },  // strikes the match
+      { type: 'bell', x: 1200, y: 100 },
+    ],
+  };
+  const sim = Core.createSim(level, []);
+  let doused = false;
+  for (let f = 0; f < 400; f++) for (const e of sim.step()) if (e.type === 'extinguish') doused = true;
+  const mm = sim.parts.find(p => p.spec.type === 'match').bodies[0].plugin.lab.match;
+  check('water douses the flaring match — spent, never relights', doused && mm.dead && !mm.lit);
+}
+
+// 31. Laser cannon: a touch fires the beam; it pops a tethered balloon at
+//     range, and a wall between them shields the shot.
+{
+  const mk = (block) => {
+    const fixed = [
+      { type: 'laser', x: 400, y: 560, angle: 90 },   // beam points right
+      { type: 'ball_marble', x: 400, y: 480 },        // falls onto the cannon
+      { type: 'balloon_goal', x: 700, y: 560 },
+    ];
+    if (block) fixed.push({ type: 'wall', x: 550, y: 560 });
+    return { goalType: 'pop', fixed };
+  };
+  const open = Core.simulate(mk(false), [], { maxSeconds: 8, collectEvents: true });
+  check('touched laser fires; beam pops the balloon across the gap',
+    open.won && open.events.some(e => e.type === 'laser'), `t=${open.seconds}s`);
+  const shielded = Core.simulate(mk(true), [], { maxSeconds: 8, collectEvents: true });
+  check('wall blocks the beam — balloon behind it survives',
+    !shielded.won && shielded.events.some(e => e.type === 'laser'));
+}
+
+// 32. Laser as igniter: the beam lights a cold candle wick and ignites a
+//     fuse mid-span (sensors never block it).
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'laser', x: 400, y: 285, angle: 90 },
+      { type: 'ball_marble', x: 400, y: 200 },
+      { type: 'candle', x: 700, y: 322, lit: false },  // wick tip right on the beam line
+      { type: 'fuse', x: 550, y: 285 },                // crossed on the way
+      { type: 'bell', x: 1200, y: 650 },
+    ],
+  };
+  const sim = Core.createSim(level, []);
+  for (let f = 0; f < 300; f++) sim.step();
+  const cm = sim.parts.find(p => p.spec.type === 'candle').bodies[0].plugin.lab.candle;
+  const fm = sim.parts.find(p => p.spec.type === 'fuse').bodies[0].plugin.lab.fuse;
+  check('beam lights the cold candle and ignites the fuse it crosses', cm.lit && fm.ignited);
+}
+
+// 33. Switch-wired laser: beam only while something presses the plate.
+{
+  const level = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'laser', x: 430, y: 560, angle: 90 },
+      { type: 'switch', x: 430, y: 680 },              // wires to the cannon
+      { type: 'balloon_goal', x: 720, y: 560 },
+    ],
+  };
+  const idle = Core.simulate(level, [], { maxSeconds: 6 });
+  check('switch-wired laser stays dark with nothing on the plate', !idle.won && idle.settled);
+  const r = Core.simulate(level, [{ type: 'ball_marble', x: 430, y: 600 }], { maxSeconds: 8, collectEvents: true });
+  check('weight on the plate -> continuous beam pops the balloon',
+    r.won && r.events.some(e => e.type === 'laser'), `t=${r.seconds}s`);
+}
+
+// 34. Candle fire frees a tethered balloon: the flame burns the string and
+//     the balloon floats up into the cactus (the fire way to pop goals).
+{
+  const level = {
+    goalType: 'pop',
+    fixed: [
+      { type: 'balloon_goal', x: 600, y: 400 },   // string hangs 600,424 -> 600,495
+      { type: 'candle', x: 600, y: 490 },         // lit tip at (600,453), on the string
+      { type: 'spikes', x: 600, y: 150 },
+    ],
+  };
+  const r = Core.simulate(level, [], { maxSeconds: 10, collectEvents: true });
+  check('candle flame burns the balloon string; freed balloon pops on the cactus',
+    r.won && r.events.some(e => e.type === 'snip' && e.cause === 'fire'), `t=${r.seconds}s`);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

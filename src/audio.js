@@ -296,6 +296,15 @@
       o.frequency.exponentialRampToValueAtTime(60, t + 0.3); env(g.gain, t, 0.005, 0.15, 0.3);
       chain(o, lp, g, sfxBus); o.start(t);
       shot(o, t + 0.33, [o, lp, g]);
+    },
+    laser: function (t) { // laser cannon: classic descending PEW + bright zap
+      var r = rnd(0.92, 1.08);
+      var b = tone(t, 'sawtooth', 1500 * r, 0.16, 0.28, 0.002);
+      b.o.frequency.exponentialRampToValueAtTime(210 * r, t + 0.16);
+      var s = tone(t, 'square', 2200 * r, 0.05, 0.1, 0.001, rnd(-30, 30));
+      s.o.frequency.exponentialRampToValueAtTime(900 * r, t + 0.05);
+      shot(b.o, t + 0.19, b.nodes.concat(noiseHit(t, 0.02, 'highpass', 5000, null, 0.1)));
+      shot(s.o, t + 0.07, s.nodes);
     }
   };
 
@@ -571,6 +580,7 @@
         case 'snip': sfx('snip'); break;
         case 'snipclick': sfx('rotate'); break; // blade snap without a cut
         case 'thwack': sfx('thwack'); break;
+        case 'laser': sfx('laser'); break;
         case 'switch_on': sfx('switchOn'); break;
         case 'switch_off': sfx('switchOff'); break;
         case 'ignite': sfx('igniteFizz'); break;

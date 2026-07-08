@@ -36,6 +36,8 @@
     hydrant:     { w: 52,  h: 62,  static: true,  placeable: true, dir: ['right', 'left', 'up'] },
     switch:      { w: 84,  h: 20,  static: true,  placeable: true },
     fist:        { w: 66,  h: 46,  static: true,  placeable: true, rot: true },
+    match:       { w: 12,  h: 54,  static: true,  placeable: true, rot: true },
+    laser:       { w: 60,  h: 44,  static: true,  placeable: true, rot: true },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -58,7 +60,7 @@
     ball_beach: 'rubber', ball_marble: 'marble', berry: 'berry', magnet: 'magnet',
     balloon: 'balloon', balloon_goal: 'balloon', bell: 'bell', bowl: 'wood', spikes: 'wood',
     rope: 'wood', scissors: 'magnet', candle: 'wood', fuse: 'wood',
-    hydrant: 'magnet', switch: 'wood', fist: 'bumper',
+    hydrant: 'magnet', switch: 'wood', fist: 'bumper', match: 'wood', laser: 'magnet',
   };
 
   const FAN_REACH = 280;
@@ -78,6 +80,10 @@
   const SWITCH_WIRE_REACH = 260;    // links to the nearest fan/conveyor/magnet
   const FIST_LAUNCH = 15;           // punch speed straight up (px/frame)
   const FIST_COOLDOWN = 60;
+  const MATCH_FLARE_FRAMES = 150;   // a struck match burns ~2.5s, then it's spent
+  const LASER_REACH = 420;
+  const LASER_FIRE_FRAMES = 30;     // one trigger buys ~0.5s of beam
+  const LASER_COOLDOWN_FRAMES = 50;
 
   let nextId = 1;
 
@@ -119,6 +125,16 @@
     const vx = b.x - a.x, vy = b.y - a.y;
     const t = Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / (vx * vx + vy * vy || 1)));
     return Math.hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t));
+  }
+  // nearest sampled point of segment a1-a2 that comes within r of segment
+  // b1-b2, or null (conservative sampling, same spirit as segIntersectsOBB)
+  function segHitSeg(a1, a2, b1, b2, r) {
+    const steps = 24;
+    for (let i = 0; i <= steps; i++) {
+      const p = { x: a1.x + (a2.x - a1.x) * i / steps, y: a1.y + (a2.y - a1.y) * i / steps };
+      if (distPointSeg(p, b1, b2) <= r) return p;
+    }
+    return null;
   }
   // point on a fuse's long axis for parameter u in [0,1]
   function fusePoint(body, len, u) {
@@ -188,8 +204,10 @@
         break;
 
       case 'candle':
+        // spec.lit === false places it cold (lightable by any flame/laser);
+        // default stays lit so every existing level keeps its behaviour.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.1 }),
-          { candle: { lit: true } }));
+          { candle: { lit: spec.lit !== false } }));
         break;
 
       case 'fuse':
@@ -215,6 +233,22 @@
         // glove points after rotation.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.4, restitution: 0.1 }),
           { fist: { cooldown: 0 } }));
+        break;
+
+      case 'match':
+        // Strike-anywhere match: a decent bump flares the head into a real
+        // flame for MATCH_FLARE_FRAMES, then the match is spent for good.
+        // Rotatable so the head can point at whatever should catch fire.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.4, restitution: 0.1 }),
+          { match: { lit: false, timer: 0, dead: false } }));
+        break;
+
+      case 'laser':
+        // Toy laser cannon, rotatable 360°: fires along its local "up" when
+        // touched (or while a wired switch is pressed). The beam stops at the
+        // first solid body; see applyBehaviours for what it does on the way.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.3, restitution: 0.2 }),
+          { laz: { firing: 0, cooldown: 0, beamLen: 0 } }));
         break;
 
       case 'domino':
@@ -385,7 +419,7 @@
       const swBody = p.bodies[0];
       let best = null, bd = SWITCH_WIRE_REACH;
       for (const q of parts) {
-        if (!['fan', 'conveyor', 'magnet', 'hydrant'].includes(q.spec.type)) continue;
+        if (!['fan', 'conveyor', 'magnet', 'hydrant', 'laser'].includes(q.spec.type)) continue;
         const d = Math.hypot(q.bodies[0].position.x - swBody.position.x, q.bodies[0].position.y - swBody.position.y);
         if (d < bd) { bd = d; best = q; }
       }
@@ -489,6 +523,23 @@
           }
         }
 
+        // Match strike: a decent bump anywhere on the stick flares the head.
+        for (const [ms, o] of [[a, b], [b, a]]) {
+          if (lab(ms).match && !o.isStatic && !o.isSensor && relSpeed >= 1.6) strikeMatch(ms);
+        }
+
+        // Laser trigger: any touch fires one beam burst (switch-wired
+        // cannons ignore touches — the switch decides).
+        for (const [lc, o] of [[a, b], [b, a]]) {
+          const meta = lab(lc), lz = meta.laz;
+          if (!lz || meta.switchControlled || o.isStatic || o.isSensor) continue;
+          if (lz.cooldown > 0 || lz.firing > 0) continue;
+          lz.firing = LASER_FIRE_FRAMES;
+          lz.cooldown = LASER_FIRE_FRAMES + LASER_COOLDOWN_FRAMES;
+          const nx = Math.sin(lc.angle), ny = -Math.cos(lc.angle);
+          state.events.push({ type: 'laser', x: lc.position.x + nx * (meta.h / 2 + 4), y: lc.position.y + ny * (meta.h / 2 + 4) });
+        }
+
         // Spring-loaded fist. Two triggers:
         //  - GLOVE side (local -y): punches the toucher itself, as before;
         //  - BACK plunger (local +y): fires the glove remotely, launching
@@ -565,6 +616,18 @@
     // --- machine-shop helpers -------------------------------------------------
     const rectContains = (r, p) => p.x >= r.min.x && p.x <= r.max.x && p.y >= r.min.y && p.y <= r.max.y;
     const flameTip = (body, h) => ({ x: body.position.x, y: body.position.y - h / 2 - 8 });
+    // the match head sits at the stick's local "up" end, wherever it points
+    const matchHead = (body, h) => ({
+      x: body.position.x + Math.sin(body.angle) * (h / 2 + 6),
+      y: body.position.y - Math.cos(body.angle) * (h / 2 + 6),
+    });
+    function strikeMatch(body) {
+      const m = lab(body), mm = m.match;
+      if (mm.lit || mm.dead) return;
+      mm.lit = true; mm.timer = MATCH_FLARE_FRAMES;
+      const head = matchHead(body, m.h);
+      state.events.push({ type: 'ignite', x: head.x, y: head.y });
+    }
     function ropeEnds(p) {
       const anchor = p.bodies[0], m = lab(anchor);
       if (!m.rope.attached) return null;
@@ -765,6 +828,13 @@
               cm.lit = false;
               state.events.push({ type: 'extinguish', x: tip.x, y: tip.y });
             }
+          } else if (q.spec.type === 'match') {
+            const mm = lab(q.bodies[0]).match;
+            const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
+            if (mm.lit && rectContains(region, head)) {
+              mm.lit = false; mm.dead = true; // a soaked match is spent
+              state.events.push({ type: 'extinguish', x: head.x, y: head.y });
+            }
           } else if (q.spec.type === 'fuse') {
             const fm = lab(q.bodies[0]).fuse;
             if (!fm.active) continue;
@@ -792,11 +862,26 @@
         if (fm.a <= 0 && fm.b >= 1) { fm.active = false; fm.dead = true; }
       }
 
-      // Collect live flame points: lit candles + burning fuse fronts.
+      // Burn down flaring matches; a spent match never lights again.
+      for (const p of parts) {
+        if (p.spec.type !== 'match') continue;
+        const mm = lab(p.bodies[0]).match;
+        if (!mm.lit) continue;
+        mm.timer--;
+        if (mm.timer <= 0) {
+          mm.lit = false; mm.dead = true;
+          const head = matchHead(p.bodies[0], lab(p.bodies[0]).h);
+          state.events.push({ type: 'extinguish', x: head.x, y: head.y });
+        }
+      }
+
+      // Collect live flame points: lit candles + flaring matches + fuse fronts.
       const flames = [];
       for (const p of parts) {
         if (p.spec.type === 'candle' && lab(p.bodies[0]).candle.lit) {
           flames.push(flameTip(p.bodies[0], lab(p.bodies[0]).h));
+        } else if (p.spec.type === 'match' && lab(p.bodies[0]).match.lit) {
+          flames.push(matchHead(p.bodies[0], lab(p.bodies[0]).h));
         } else if (p.spec.type === 'fuse') {
           const fm = lab(p.bodies[0]).fuse;
           if (!fm.active) continue;
@@ -826,6 +911,11 @@
               cm.lit = true;
               state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
             }
+          } else if (q.spec.type === 'match') {
+            const mm = lab(q.bodies[0]).match;
+            const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
+            if (!mm.lit && !mm.dead && Math.hypot(head.x - f.x, head.y - f.y) < FLAME_R * 1.3)
+              strikeMatch(q.bodies[0]);
           } else if (q.spec.type === 'rope') {
             const ends = ropeEnds(q);
             if (ends && distPointSeg(f, ends[0], ends[1]) < 14) cutRope(q, f.x, f.y, 'fire');
@@ -861,6 +951,76 @@
         }
       }
 
+      // Laser cannons: while firing, march the beam to the first solid body;
+      // on the way it pops balloons, lights candles/matches/fuses, and burns
+      // ropes and tether strings. Sensors and balloons never block the beam.
+      for (const p of parts) {
+        if (p.spec.type !== 'laser') continue;
+        const cb = p.bodies[0], m = lab(cb), lz = m.laz;
+        if (m.switchControlled) {
+          if (m.poweredNow && lz.firing <= 0)
+            state.events.push({ type: 'laser', x: cb.position.x, y: cb.position.y });
+          lz.firing = m.poweredNow ? 2 : 0;
+        } else {
+          if (lz.cooldown > 0) lz.cooldown--;
+          if (lz.firing > 0) lz.firing--;
+        }
+        if (lz.firing <= 0) { lz.beamLen = 0; continue; }
+        const nx = Math.sin(cb.angle), ny = -Math.cos(cb.angle);
+        const mz = { x: cb.position.x + nx * (m.h / 2 + 4), y: cb.position.y + ny * (m.h / 2 + 4) };
+        let len = LASER_REACH;
+        outer:
+        for (let s = 6; s <= LASER_REACH; s += 6) {
+          const pt = { x: mz.x + nx * s, y: mz.y + ny * s };
+          for (const b of Query.point(all, pt)) {
+            if (b.isSensor) continue;
+            const mb = lab(b);
+            if (mb && (mb.id === m.id || mb.poppable)) continue;
+            len = s; break outer;
+          }
+        }
+        lz.beamLen = len; // renderer draws the beam from this
+        const end = { x: mz.x + nx * len, y: mz.y + ny * len };
+        for (const b of all) {
+          const mb = lab(b);
+          if (mb && mb.poppable && !mb.popped
+            && distPointSeg(b.position, mz, end) < (mb.r || 20) + 4) popBalloon(b);
+        }
+        for (const q of parts) {
+          if (q.spec.type === 'candle') {
+            const cm = lab(q.bodies[0]).candle;
+            const tip = flameTip(q.bodies[0], lab(q.bodies[0]).h);
+            if (!cm.lit && distPointSeg(tip, mz, end) < 20) {
+              cm.lit = true;
+              state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
+            }
+          } else if (q.spec.type === 'match') {
+            const mm = lab(q.bodies[0]).match;
+            const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
+            if (!mm.lit && !mm.dead && distPointSeg(head, mz, end) < 20)
+              strikeMatch(q.bodies[0]);
+          } else if (q.spec.type === 'fuse') {
+            const qb = q.bodies[0], fm = lab(qb).fuse;
+            if (fm.dead) continue;
+            for (let s = 0; s <= len; s += 6) {
+              const l = toLocal(qb, { x: mz.x + nx * s, y: mz.y + ny * s });
+              if (Math.abs(l.y) <= lab(qb).h / 2 + 6 && Math.abs(l.x) <= fm.len / 2 + 4) {
+                igniteFuse(fm, qb, Math.max(0, Math.min(1, (l.x + fm.len / 2) / fm.len)));
+                break;
+              }
+            }
+          } else if (q.spec.type === 'rope') {
+            const ends = ropeEnds(q);
+            const hit = ends && segHitSeg(mz, end, ends[0], ends[1], 8);
+            if (hit) cutRope(q, hit.x, hit.y, 'fire');
+          } else if (q.spec.type === 'balloon_goal') {
+            const ends = tetherEnds(q);
+            const hit = ends && segHitSeg(mz, end, ends[0], ends[1], 8);
+            if (hit) cutTether(q, hit.x, hit.y, 'fire');
+          }
+        }
+      }
+
       // Fist cooldown / punch animation timer.
       for (const p of parts) {
         if (p.spec.type !== 'fist') continue;
@@ -884,11 +1044,13 @@
     }
 
     function isQuiescent() {
-      // a burning fuse or a spraying hydrant is pending action — never count
-      // the machine as stuck while either is live
+      // pending action is never "stuck": a burning fuse, a flaring match,
+      // a spraying hydrant or a firing laser will still change the world
       for (const p of parts) {
         if (p.spec.type === 'fuse' && lab(p.bodies[0]).fuse.active) return false;
+        if (p.spec.type === 'match' && lab(p.bodies[0]).match.lit) return false;
         if (p.spec.type === 'hydrant' && lab(p.bodies[0]).hyd.active) return false;
+        if (p.spec.type === 'laser' && lab(p.bodies[0]).laz.firing > 0) return false;
       }
       let maxV = 0;
       for (const b of dynamicBodies()) {

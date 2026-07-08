@@ -756,6 +756,71 @@
       c.beginPath(); c.ellipse(-6, top - 13, 4, 2.5, -0.5, 0, TAU); c.fill();
     },
 
+    match(c, d, a, o, body) {
+      const mm = body ? body.plugin.lab.match : { lit: false, dead: false };
+      // wooden stick
+      c.fillStyle = C.woodLight; rr(c, -d.w / 2, -d.h / 2 + 10, d.w, d.h - 10, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, -d.h / 2 + 10, d.w, d.h - 10, 4); c.stroke();
+      // head: cherry red when fresh, charcoal once spent
+      c.fillStyle = mm.dead ? '#5A4A3E' : C.poppy;
+      c.beginPath(); c.ellipse(0, -d.h / 2 + 6, d.w / 2 + 3, 9, 0, 0, TAU); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(0, -d.h / 2 + 6, d.w / 2 + 3, 9, 0, 0, TAU); c.stroke();
+      if (!mm.dead && !mm.lit) { // shine charm on a fresh head
+        c.fillStyle = 'rgba(255,249,238,0.75)';
+        c.beginPath(); c.ellipse(-2.5, -d.h / 2 + 3, 2.4, 1.6, -0.5, 0, TAU); c.fill();
+      }
+      if (mm.lit) {
+        // flare: bigger, wilder flame than the candle's steady teardrop
+        const t = o ? o.t : 0;
+        const fl = Math.sin(t * 13 + (d.seed || 0)) * 2;
+        const g2 = c.createRadialGradient(fl * 0.3, -d.h / 2 - 6, 1, fl * 0.3, -d.h / 2 - 6, 14);
+        g2.addColorStop(0, '#FFF3B0'); g2.addColorStop(0.5, C.sunny); g2.addColorStop(1, 'rgba(255,142,60,0)');
+        c.fillStyle = g2;
+        c.beginPath(); c.ellipse(fl * 0.5, -d.h / 2 - 6, 8 + fl * 0.6, 13, fl * 0.06, 0, TAU); c.fill();
+        c.fillStyle = C.tangerine;
+        c.beginPath(); c.ellipse(fl * 0.35, -d.h / 2 - 3, 3.2, 5.5, 0, 0, TAU); c.fill();
+      } else if (mm.dead) {
+        c.strokeStyle = 'rgba(140,122,107,0.6)'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(0, -d.h / 2 - 2);
+        c.quadraticCurveTo(4, -d.h / 2 - 9, 1, -d.h / 2 - 15); c.stroke(); // smoke wisp
+      }
+    },
+
+    laser(c, d, a, o, body) {
+      const lz = body ? body.plugin.lab.laz : { firing: 0, beamLen: 0 };
+      const t = o ? o.t : 0;
+      const firing = lz.firing > 0 && lz.beamLen > 0;
+      // beam first so the housing sits crisply on top of its root
+      if (firing) {
+        const y1 = -d.h / 2 - 2, y2 = -d.h / 2 - lz.beamLen;
+        for (const [col, wdt] of [['rgba(232,86,63,0.25)', 11], ['rgba(255,120,90,0.6)', 5.5], ['#FFF3B0', 2.2]]) {
+          c.strokeStyle = col; c.lineWidth = wdt; c.lineCap = 'round';
+          c.beginPath(); c.moveTo(0, y1); c.lineTo(0, y2); c.stroke();
+        }
+        // sizzling impact burst where the beam lands
+        c.save(); c.translate(0, y2); c.rotate((t * 9) % TAU);
+        c.fillStyle = C.sunny; star4(c, 0, 0, 9 + Math.sin(t * 21) * 2, 0); c.fill();
+        c.fillStyle = C.paper; circle(c, 0, 0, 3); c.fill();
+        c.restore();
+      }
+      // feet
+      c.fillStyle = C.woodMid;
+      rr(c, -d.w / 2, d.h / 2 - 8, 14, 8, 3); c.fill();
+      rr(c, d.w / 2 - 14, d.h / 2 - 8, 14, 8, 3); c.fill();
+      // housing
+      c.fillStyle = C.loryBlue; rr(c, -d.w / 2 + 4, -d.h / 2 + 12, d.w - 8, d.h - 16, 8); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2 + 4, -d.h / 2 + 12, d.w - 8, d.h - 16, 8); c.stroke();
+      // barrel + lens (breathing charge light while armed, white-hot while firing)
+      c.fillStyle = C.blueDeep; rr(c, -8, -d.h / 2 - 2, 16, 16, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -8, -d.h / 2 - 2, 16, 16, 4); c.stroke();
+      c.globalAlpha = firing ? 1 : 0.45 + 0.2 * Math.sin(t * 4 + (d.seed || 0));
+      c.fillStyle = firing ? '#FFF3B0' : C.sky;
+      circle(c, 0, -d.h / 2 + 2, 4.5); c.fill();
+      c.globalAlpha = 1;
+      c.fillStyle = C.sunny; star4(c, 0, 6, 6, 0.2); c.fill();
+    },
+
     sparkle(c, d, a, o) {
       const t = o ? o.t : 0;
       const tw = 0.75 + 0.25 * Math.sin(t * TAU / 0.9 + (d.seed || 0));
@@ -1017,6 +1082,7 @@
           fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 5); fx.poof(e.x, e.y + 10, 4);
           if (e.bodyId != null) squash.set(e.bodyId, { t: 0, nx: 0, ny: 1, amt: 0.3 });
           break;
+        case 'laser': fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 4); break;
         case 'win': shakeT = 0; break;
       }
     }
@@ -1376,6 +1442,8 @@
     const defsBtns = [];
     if (defs.rot) defsBtns.push({ id: 'rotl', icon: '⟲', col: C.loryBlue }, { id: 'rotr', icon: '⟳', col: C.loryBlue });
     if (defs.dir) defsBtns.push({ id: 'flip', icon: '⇄', col: C.tangerine });
+    // candles start lit or cold — the button icon shows what tapping DOES
+    if (sel.type === 'candle') defsBtns.push({ id: 'lit', icon: sel.lit === false ? '🔥' : '💨', col: C.tangerine });
     defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
     const pitch = 54 * B;
     let total = defsBtns.length * pitch - 10 * B + 14 * B;
@@ -1400,7 +1468,7 @@
   }
 
   // tray. boost enlarges wells on small screens where the level's tray is
-  // small enough to still fit (the 19-well sandbox stays width-bound).
+  // small enough to still fit (the 28-well sandbox stays width-bound).
   function drawTray(c, tray, o, dragType, boost) {
     const B = boost || 1;
     const y0 = BOARD_H;

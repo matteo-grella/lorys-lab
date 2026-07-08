@@ -96,7 +96,7 @@
   const SANDBOX_TRAY = [
     ['plank', 8], ['shelf', 4], ['wall', 2], ['trampoline', 3], ['seesaw', 2], ['fan', 3],
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
-    ['rope', 3], ['scissors', 2], ['candle', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2],
+    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
     ['balloon_goal', 4], ['spikes', 2],
   ];
@@ -524,6 +524,13 @@
     rebuildSim();
     A.sfx('rotate');
   }
+  function toggleLitSelection() {
+    const p = S.placements[S.selection];
+    if (!p || p.type !== 'candle') return;
+    p.lit = p.lit === false;        // cold -> lit, lit (default) -> cold
+    rebuildSim();
+    A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
+  }
 
   // ---------------------------------------------------------------------------
   // puzzle maker (sandbox): pluck parts into the tray, then save
@@ -871,6 +878,7 @@
         if (b.id === 'rotl') rotateSelection(-1);
         if (b.id === 'rotr') rotateSelection(1);
         if (b.id === 'flip') flipSelection();
+        if (b.id === 'lit') toggleLitSelection();
         if (b.id === 'del') { A.sfx('pickup'); removePlacement(S.selection); }
         return;
       }
