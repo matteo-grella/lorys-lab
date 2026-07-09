@@ -584,7 +584,7 @@ chrome --headless --disable-gpu --virtual-time-budget=60000 \
        --window-size=1400,900 --dump-dom "file://…/harness.html#pz=…" | grep 'E2E::'
 ```
 
-Three traps, all hit in production here:
+Four traps, all hit in production here:
 1. **Virtual time starves rAF**: `--virtual-time-budget` fast-forwards
    timers but barely ticks `requestAnimationFrame`, so the game loop (and
    all physics) freezes while your timer-based waits race ahead. Fix in the
@@ -598,6 +598,14 @@ Three traps, all hit in production here:
 3. Board→canvas mapping must account for the letterbox:
    `clientX = rect.left + (bx + boardOX) * rect.width / viewW` with
    `viewW = parseFloat(cv.style.width)`, `boardOX = max(0, (viewW-1280)/2)`.
+4. **`element.click()` bypasses `pointer-events`**, so a scripted close/reopen
+   can pass while real users are stuck under a `pointer-events:none` overlay
+   (that bug shipped once). Assert REAL clickability with
+   `document.elementFromPoint(cx, cy)` at the element's center — it respects
+   hit-testing. Related rule: dialogs painted into `.overlay-root` must close
+   via `showScreen(S.screen)` — it owns both the overlay content and its
+   pointer-events; a bare `innerHTML='' + pointerEvents='none'` strands
+   non-game screens.
 
 `game.js` exposes **`window.__loryDebug.state`** (read-only snapshot:
 `{screen, phase, selection, placements, tray, hints, cam, viewW, ox}`)

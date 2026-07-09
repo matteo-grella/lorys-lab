@@ -5874,7 +5874,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       <div class="screen title-screen">
         <canvas id="titleLory" width="260" height="260"></canvas>
         <h1>Lory's Lab</h1>
-        <p class="tag">Build silly machines. Feed the bird. 🍓</p>
+        <p class="tag">Build incredible machines. Feed the bird. 🍓</p>
         <button class="big leaf" id="startBtn">▶&ensp;Play</button>
         <button class="big blue" id="sandboxBtn">🎨&ensp;Sandbox</button>
         <div class="mode-row">
@@ -6315,10 +6315,12 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         </div>
       </div>`;
     $('#pzOfferName').textContent = pz.by ? `“${pz.name}” by ${pz.by}` : `“${pz.name}”`;
-    const close = () => { root.innerHTML = ''; root.style.pointerEvents = 'none'; };
-    $('#pzOfferNo').onclick = () => { A.sfx('button'); close(); if (S.screen === 'levels') showLevelSelect(); };
+    // closing a dialog = re-rendering the screen it covered: showScreen owns
+    // BOTH the overlay content and its pointer-events (a bare innerHTML=''
+    // + pointerEvents='none' left the levels screen unclickable)
+    const close = () => showScreen(S.screen);
+    $('#pzOfferNo').onclick = () => { A.sfx('button'); close(); };
     $('#pzOfferYes').onclick = () => {
-      close();
       const r = importPuzzles([pz]);
       if (r.added) {
         A.sfx('win');
@@ -6326,12 +6328,11 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         adviseSolvability(pz);
         save.mode = save.mode || 'sprout'; // a share link may be someone's first visit
         persist();
-        if (S.screen === 'title') showScreen('levels');
       } else {
         A.sfx('button');
         toast('You already have this one!', 4);
-        if (S.screen === 'levels') showLevelSelect();
       }
+      if (S.screen === 'title') showScreen('levels'); else close();
     };
   }
 
@@ -6365,8 +6366,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     const onEsc = (e) => { if (e.key === 'Escape') { A.sfx('button'); close(); } };
     const close = () => {
       document.removeEventListener('keydown', onEsc);
-      root.innerHTML = ''; root.style.pointerEvents = 'none';
-      if (S.screen === 'levels') showLevelSelect();
+      showScreen(S.screen); // restores content AND pointer-events together
     };
     document.addEventListener('keydown', onEsc);
     $('#pzShareClose').onclick = () => { A.sfx('button'); close(); };
