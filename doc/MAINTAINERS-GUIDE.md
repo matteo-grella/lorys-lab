@@ -46,7 +46,8 @@ Incredible Machine*) for ages 5+. The player drags parts from a tray onto a
 board, presses ▶, and physics runs a chain reaction. Goals: deliver the berry
 into Lory's bowl (`catch`), ring a bell (`bell`), or pop all goal balloons
 (`pop`). Features: a 24-level campaign, a sandbox, a user puzzle maker with
-persistent saved puzzles, hints rendered as ghost outlines, 3-star sparkle
+persistent saved puzzles, puzzle sharing via links and `.lorypuzzle` files
+(§9), hints rendered as ghost outlines, 3-star sparkle
 pickups, two age modes, and a secret unlock cheat. The sandbox additionally
 carries the "machine shop": ropes, triggered scissors, candles (placeable lit
 or cold), strike-anywhere matches, fuses, bump-activated hydrants, pressure
@@ -550,11 +551,13 @@ node build.mjs           # regenerates dist/ (see §10)
 **Definition of green**: smoke N/N (currently 54/54), verify N/N (currently 24/24),
 puzzlecode N/N (currently 31/31), audio-shape passes, all `--check`s pass.
 
-### Browser E2E (Playwright)
+### Browser E2E (Playwright, or bare headless Chrome)
 
-There is no committed E2E suite, but the pattern used throughout development
-(scripts lived in the session scratchpad) is worth reproducing for any UI
-change:
+There is no committed E2E suite, but two patterns used throughout development
+(scripts lived in the session scratchpad) are worth reproducing for any UI
+change.
+
+**Playwright** (if installed):
 
 ```js
 import { chromium } from 'playwright';
@@ -568,14 +571,45 @@ const b2s = async (bx, by) => { const r = await page.locator('#game').boundingBo
 // drag = mouse.down + ~12 interpolated moves + mouse.up
 ```
 
+**Bare headless Chrome** (zero dependencies — the harness that actually ran
+this project's E2E): copy `index.html`, inject right after `<head>`
+(1) `<base href="file:///abs/path/to/repo/">` so relative script paths
+resolve, (2) a seed `<script>` that writes `localStorage` BEFORE game.js
+loads (saved puzzles, mode, sfx:false), then append a driver `<script>`
+before `</body>` that clicks DOM buttons / dispatches `PointerEvent`s and
+writes results into a `#e2e-result` div. Run:
+
+```bash
+chrome --headless --disable-gpu --virtual-time-budget=60000 \
+       --window-size=1400,900 --dump-dom "file://…/harness.html#pz=…" | grep 'E2E::'
+```
+
+Three traps, all hit in production here:
+1. **Virtual time starves rAF**: `--virtual-time-budget` fast-forwards
+   timers but barely ticks `requestAnimationFrame`, so the game loop (and
+   all physics) freezes while your timer-based waits race ahead. Fix in the
+   seed script, before game.js loads:
+   `window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);`
+   — physics and waits then share one virtual clock.
+2. **Synthetic pointers can't be captured**: `cv.setPointerCapture(id)`
+   throws for a dispatched `PointerEvent`'s fake pointerId, killing
+   `onPointerDown` before it does anything. Stub
+   `cv.setPointerCapture = cv.releasePointerCapture = () => {}` first.
+3. Board→canvas mapping must account for the letterbox:
+   `clientX = rect.left + (bx + boardOX) * rect.width / viewW` with
+   `viewW = parseFloat(cv.style.width)`, `boardOX = max(0, (viewW-1280)/2)`.
+
 `game.js` exposes **`window.__loryDebug.state`** (read-only snapshot:
-`{screen, phase, selection, placements, tray}`) precisely so E2E scripts can
-assert editor state. Keep it working.
+`{screen, phase, selection, placements, tray, hints, cam, viewW, ox}`)
+precisely so E2E scripts can assert editor state. Keep it working.
 
 The canonical E2E checks: play L1 with its solution and reach the win overlay;
 re-select/move/rotate a placed part; verify parts lock during ▶; sandbox
 build → 🧩 → pluck → 💾 → reload → play → "You fed Lory!"; secret unlock
-(press `l` ×5 on level select).
+(press `l` ×5 on level select); open a `#pz=` share link → Keep → puzzle
+appears in the grid, same link again → no duplicate; edit a saved puzzle →
+selection 📌 un-marks a plucked part; user-puzzle hints (fail ×2 in sprout
+→ auto-ghosts).
 
 ---
 
@@ -747,7 +781,9 @@ S.phase (game screen): 'edit' | 'run' | 'won'
 - **Hit-testing placed parts**: `hitPlacement()` matches sim bodies back to
   placements **by value** (`type + x + y + angle + dir`) because `createSim`
   stores spec *copies*. If you add a spec field that changes during simulation,
-  matching will break — don't.
+  matching will break — don't. It filters out sensor bodies (invisible helper
+  zones must not steal taps) with ONE exception: the fuse, whose only body IS
+  a sensor — drop that exception and fuses become unselectable forever.
 - **Selection**: index into `S.placements`; canvas-drawn buttons (from
   `R.draw`) are hit-tested first on pointerdown. Rotation: ⟲/⟳ buttons ±15°,
   `R`/`Shift+R` keys, mouse wheel ±5° (only parts with `defs.rot`).
