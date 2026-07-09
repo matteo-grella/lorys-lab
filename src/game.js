@@ -362,7 +362,10 @@
     root.innerHTML = `<div class="screen levels-screen">
       <div class="lv-head"><button class="chip btn" id="homeBtn">←</button><h2 id="lvTitle">Pick a puzzle!</h2></div>
       <div class="grid" id="grid"></div>
-      <div class="lv-mine" id="mineWrap" style="display:none"><h3>🧩 My puzzles</h3><div class="grid" id="mineGrid"></div></div>
+      <div class="lv-mine" id="mineWrap"><h3>🧩 My puzzles
+        <button class="chip btn" id="pzImportBtn" title="Open a puzzle file">📥</button>
+        <button class="chip btn" id="pzBackupBtn" title="Save all my puzzles to a file" style="display:none">📦</button></h3>
+        <div class="grid" id="mineGrid"></div></div>
     </div>`;
     const grid = $('#grid');
     const maxOpen = unlockedThrough();
@@ -383,19 +386,27 @@
     $('#homeBtn').onclick = () => { A.sfx('button'); showScreen('title'); };
     $('#lvTitle').addEventListener('click', () => secretTick()); // touch path to the secret key
 
-    // saved user puzzles
+    // saved user puzzles (the section always shows: 📥 import must work even
+    // on a fresh device with zero puzzles — that's the restore-backup path)
+    $('#pzImportBtn').onclick = () => { A.sfx('button'); openPuzzleFilePicker(); };
     if (save.myPuzzles.length) {
-      $('#mineWrap').style.display = '';
+      $('#pzBackupBtn').style.display = '';
+      $('#pzBackupBtn').onclick = () => { A.sfx('button'); backupAllPuzzles(); };
       const mine = $('#mineGrid');
       save.myPuzzles.forEach(p => {
         const card = el('button', 'card mine');
         const solved = save.puzzleWins[p.id] ? '⭐ solved!' : '&nbsp;';
-        card.innerHTML = `<div class="num">🧩</div><div class="nm">${p.name.replace(/</g, '&lt;')}</div><div class="stars">${solved}</div><span class="pedit" title="Edit">✎</span><span class="pdel" title="Delete">✕</span>`;
+        card.innerHTML = `<div class="num">🧩</div><div class="nm">${p.name.replace(/</g, '&lt;')}</div><div class="stars">${solved}</div><span class="pedit" title="Edit">✎</span><span class="pdel" title="Delete">✕</span><span class="pshare" title="Share">📤</span>`;
         card.onclick = () => { A.sfx('levelpop'); enterLevel(0, false, p); };
         card.querySelector('.pedit').onclick = (e) => {
           e.stopPropagation();
           A.sfx('button');
           editPuzzleInSandbox(p);
+        };
+        card.querySelector('.pshare').onclick = (e) => {
+          e.stopPropagation();
+          A.sfx('button');
+          sharePuzzleDialog(p);
         };
         const del = card.querySelector('.pdel');
         del.onclick = (e) => {
@@ -641,6 +652,181 @@
       R.fx.confetti(640, 300, 40);
       setLory('cheer', editing ? `"${name}" is updated! 🧩` : `"${name}" is saved! Find it under Pick-a-puzzle. 🧩`, 6);
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // puzzle sharing: links + .lorypuzzle files (wire format in core puzzleCode)
+  // ---------------------------------------------------------------------------
+  let pzSeq = 0;
+  const puzzleId = () => 'pz' + Date.now().toString(36) + (pzSeq++).toString(36);
+
+  function importPuzzles(list) {
+    const have = new Set();
+    for (const q of save.myPuzzles) {
+      try { have.add(Core.puzzleCode.canonical(q)); } catch (e) { /* legacy oddity: never block imports */ }
+    }
+    let added = 0, dupes = 0;
+    for (const pz of list) {
+      const canon = Core.puzzleCode.canonical(pz);
+      if (have.has(canon)) { dupes++; continue; }
+      have.add(canon);
+      const rec = { id: puzzleId(), name: pz.name, fixed: pz.fixed, plucked: pz.plucked };
+      if (pz.by) rec.by = pz.by;
+      save.myPuzzles.push(rec);
+      added++;
+    }
+    if (added) persist();
+    if (S.screen === 'levels') showLevelSelect();
+    return { added, dupes };
+  }
+
+  function adviseSolvability(pz) {
+    // the author's layout is the solution; if physics evolved since it was
+    // made it may no longer win — kids deserve a heads-up, not a rejection
+    setTimeout(() => {
+      try {
+        const r = Core.simulate({ goalType: 'catch', fixed: pz.fixed }, pz.plucked, { maxSeconds: 30 });
+        if (!r.won) setLory('think', `Hmm, "${pz.name}" plays differently in this version of the game — it might need a little fix!`, 8);
+      } catch (e) { /* advice must never break an import */ }
+    }, 50);
+  }
+
+  function checkSharedPuzzle() {
+    const m = /[#&]pz=(LORY\d+\.[A-Za-z0-9\-_]+)/.exec(location.hash || '');
+    if (!m) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    Core.puzzleCode.decode(m[1]).then(offerSharedPuzzle, (e) => {
+      toast(e.message === 'newer-version'
+        ? 'This puzzle needs a newer Lory’s Lab — reload the game to update!'
+        : 'Hmm, this puzzle link looks broken!', 5);
+    });
+  }
+
+  function offerSharedPuzzle(pz) {
+    if ($('#pzOfferYes')) return; // one offer at a time
+    const root = $('.overlay-root');
+    root.style.pointerEvents = 'auto';
+    root.innerHTML = `
+      <div class="dim-bg"></div>
+      <div class="wincard namecard">
+        <h2>🧩 A puzzle for you!</h2>
+        <p id="pzOfferName" style="text-align:center;font-weight:800;margin:6px 0 18px"></p>
+        <div class="row">
+          <button class="big blue" id="pzOfferNo">✕&ensp;Not now</button>
+          <button class="big leaf" id="pzOfferYes">➕&ensp;Keep it</button>
+        </div>
+      </div>`;
+    $('#pzOfferName').textContent = pz.by ? `“${pz.name}” by ${pz.by}` : `“${pz.name}”`;
+    const close = () => { root.innerHTML = ''; root.style.pointerEvents = 'none'; };
+    $('#pzOfferNo').onclick = () => { A.sfx('button'); close(); if (S.screen === 'levels') showLevelSelect(); };
+    $('#pzOfferYes').onclick = () => {
+      close();
+      const r = importPuzzles([pz]);
+      if (r.added) {
+        A.sfx('win');
+        toast(`“${pz.name}” is in 🧩 My puzzles!`, 4);
+        adviseSolvability(pz);
+        save.mode = save.mode || 'sprout'; // a share link may be someone's first visit
+        persist();
+        if (S.screen === 'title') showScreen('levels');
+      } else {
+        A.sfx('button');
+        toast('You already have this one!', 4);
+        if (S.screen === 'levels') showLevelSelect();
+      }
+    };
+  }
+
+  function shareUrl(code) {
+    const base = location.origin && location.origin !== 'null' ? location.origin + location.pathname : '';
+    return base + '#pz=' + code;
+  }
+
+  async function sharePuzzleDialog(p) {
+    let code;
+    try { code = await Core.puzzleCode.encode(p); }
+    catch (e) { toast('This puzzle cannot be shared — try re-saving it!', 5); return; }
+    const url = shareUrl(code);
+    const root = $('.overlay-root');
+    root.style.pointerEvents = 'auto';
+    root.innerHTML = `
+      <div class="dim-bg"></div>
+      <div class="wincard namecard">
+        <h2>📤 Share this puzzle!</h2>
+        <input id="pzLink" readonly>
+        <div class="row">
+          ${navigator.share ? '<button class="big leaf" id="pzShareNative">📱&ensp;Share</button>' : ''}
+          <button class="big blue" id="pzCopy">🔗&ensp;Copy link</button>
+          <button class="big blue" id="pzFile">📦&ensp;To file</button>
+          <button class="big" id="pzShareClose">✕</button>
+        </div>
+      </div>`;
+    $('#pzLink').value = url;
+    const close = () => { root.innerHTML = ''; root.style.pointerEvents = 'none'; if (S.screen === 'levels') showLevelSelect(); };
+    $('#pzShareClose').onclick = () => { A.sfx('button'); close(); };
+    $('#pzCopy').onclick = async () => {
+      A.sfx('button');
+      try { await navigator.clipboard.writeText(url); toast('Link copied! Send it to a friend 🧡', 4); }
+      catch (e) { $('#pzLink').focus(); $('#pzLink').select(); toast('Press Ctrl/Cmd+C to copy the link!', 4); }
+    };
+    const sn = $('#pzShareNative');
+    if (sn) sn.onclick = async () => {
+      A.sfx('button');
+      try { await navigator.share({ title: `Lory’s Lab — ${p.name}`, text: `Play “${p.name}” in Lory’s Lab!`, url }); close(); }
+      catch (e) { /* share sheet dismissed */ }
+    };
+    $('#pzFile').onclick = () => {
+      A.sfx('button');
+      downloadPuzzleFile(`# Lory's Lab puzzle — open the game, press 📥 and pick this file\n# ${p.name}\n${code}\n`, p.name);
+    };
+  }
+
+  function downloadPuzzleFile(text, name) {
+    const blob = new Blob([text], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const slug = (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'puzzle';
+    a.download = slug + '.lorypuzzle';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('Saved! Keep it somewhere safe 📦', 4);
+  }
+
+  async function backupAllPuzzles() {
+    if (!save.myPuzzles.length) return;
+    const out = ["# Lory's Lab puzzles — open the game, press 📥 and pick this file"];
+    let skipped = 0;
+    for (const p of save.myPuzzles) {
+      try { const c = await Core.puzzleCode.encode(p); out.push('# ' + p.name, c); }
+      catch (e) { skipped++; }
+    }
+    downloadPuzzleFile(out.join('\n') + '\n', 'lorys-lab-puzzles');
+    if (skipped) setLory('think', `${skipped} puzzle${skipped > 1 ? 's' : ''} couldn't be packed — that's odd!`, 6);
+  }
+
+  function openPuzzleFilePicker() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.lorypuzzle,.txt,text/plain';
+    inp.onchange = async () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      const text = await f.text();
+      const codes = (text.match(/LORY\d+\.[A-Za-z0-9\-_]+/g) || []).slice(0, 200);
+      const decoded = [];
+      let broken = 0;
+      for (const c of codes) {
+        try { decoded.push(await Core.puzzleCode.decode(c)); } catch (e) { broken++; }
+      }
+      if (!decoded.length && !broken) { toast('No puzzles found in that file!', 4); return; }
+      const r = importPuzzles(decoded);
+      A.sfx(r.added ? 'win' : 'button');
+      toast(r.added
+        ? `Added ${r.added} puzzle${r.added > 1 ? 's' : ''}!${r.dupes ? ' (' + r.dupes + ' you already had)' : ''}`
+        : (r.dupes ? 'You already have all of those!' : 'No puzzles found in that file!'), 5);
+      if (broken) setLory('think', `${broken} puzzle${broken > 1 ? 's' : ''} in the file couldn't be read — maybe from a newer Lory's Lab?`, 6);
+    };
+    inp.click();
   }
 
   function onHint() {
@@ -1190,6 +1376,8 @@
     }, { once: false, capture: true });
     S.sim = Core.createSim({ fixed: [], sparkles: [] }, []);
     showScreen('title');
+    checkSharedPuzzle(); // a #pz=LORY… link opened the game: offer the puzzle
+    window.addEventListener('hashchange', checkSharedPuzzle);
     requestAnimationFrame(frame);
   }
 

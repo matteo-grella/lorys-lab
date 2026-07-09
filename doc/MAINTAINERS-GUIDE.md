@@ -93,6 +93,7 @@ lorys-lab/
 ├── test/
 │   ├── smoke.mjs            54 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
+│   ├── puzzlecode.mjs       puzzle wire-format roundtrip + hostile-input proofs
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
 ├── design/                  design-time documents (visual spec, audio spec,
 │                            level candidates) — not loaded by the game
@@ -125,7 +126,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 
 | Producer | Consumer | Contract |
 |---|---|---|
-| core | game | `createSim(levelDef, placements)` → sim object; `sim.step()` → events array; `sim.state` flags; `PART_DEFS`; `placementOverlaps(sim, spec)`; `simulate(levelDef, placements, opts)` (headless) |
+| core | game | `createSim(levelDef, placements)` → sim object; `sim.step()` → events array; `sim.state` flags; `PART_DEFS`; `placementOverlaps(sim, spec)`; `simulate(levelDef, placements, opts)` (headless); `puzzleCode.{encode,decode,canonical}` (puzzle sharing, async) |
 | core | render | each Matter body carries `body.plugin.lab` metadata (`type,id,w,h,r,dir,spec,...`); event objects for FX |
 | core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off, laser` |
 | render | game | `R.draw(frame)` returns `{selButtons, wells}` hit-regions the input code uses next frame |
@@ -540,13 +541,14 @@ Run everything from the project root:
 ```bash
 node test/smoke.mjs      # 54 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
+node test/puzzlecode.mjs # puzzle wire-format roundtrip + hostile-input proofs
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext
 node --check src/*.js    # syntax gate for every module
 node build.mjs           # regenerates dist/ (see §10)
 ```
 
 **Definition of green**: smoke N/N (currently 54/54), verify N/N (currently 24/24),
-audio-shape passes, all `--check`s pass.
+puzzlecode N/N (currently 31/31), audio-shape passes, all `--check`s pass.
 
 ### Browser E2E (Playwright)
 
@@ -817,6 +819,21 @@ silently. All shapes are defaulted on load — never assume fields exist.
   sparkles; star chip hidden, hints fully active (same mode logic as the
   campaign, no skip); win records `puzzleWins[id]` and
   shows the custom "You fed Lory!" overlay.
+- **Puzzle sharing** (`core.js puzzleCode` + game.js): wire format
+  `LORY1.<base64url(deflate-raw(json))>` (`LORY0.` = uncompressed fallback);
+  payload `{v, name, by?, fixed:[[type,x,y,extra?]…], plucked:[…]}` where
+  `extra` is ONE of number=angle / string=dir (default omitted) / false=cold
+  candle. `decode()` validates EVERYTHING into fresh objects (unknown part or
+  future `v` → `newer-version`; bounds/caps/shape errors → `bad-data`;
+  ≥1 berry+bowl and ≥1 plucked required; ≤100 parts; inflate capped —
+  zip-bomb guard). Share paths: per-card 📤 dialog (native share / copy link
+  / `.lorypuzzle` file), 📥 file import (regex-scans any text for codes, max
+  200), 📦 backup-all (one file, `#`-comment headers). Links carry
+  `#pz=<code>`; boot + `hashchange` call `checkSharedPuzzle()` → offer
+  dialog (names rendered via `textContent`). Imports dedupe by
+  `puzzleCode.canonical` (name+by+layout) and get fresh local ids; after an
+  import the author layout is re-simulated and Lory warns if it no longer
+  wins (physics drift advisory, never a rejection).
 
 ---
 
@@ -1042,3 +1059,8 @@ E2E scripts must assert `pageerror` count is zero.
     `render.js paintBackground()` from a base64-encoded constant so the
     names never appear literally in source — it is the project's watermark
     and ships in every build.
+16. **Foreign puzzle data enters ONLY through `puzzleCode.decode`.** Never
+    build placements from raw JSON of a link/file: decode validates every
+    field into fresh objects (part whitelist, bounds, caps, no foreign
+    keys) and is what keeps shared puzzles data-only. User text (puzzle
+    names) is rendered via `textContent` or canvas — never raw innerHTML.

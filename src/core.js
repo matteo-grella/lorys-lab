@@ -1134,5 +1134,173 @@
     return overlaps;
   }
 
-  return { PART_DEFS, MATERIAL, WORLD, makePart, createSim, simulate, placementOverlaps, Matter };
+  // ---------------------------------------------------------------------------
+  // Puzzle wire format — share links, .lorypuzzle files, the community shelf.
+  // `LORY1.<base64url(deflate-raw(json))>`, or `LORY0.<base64url(json)>` when
+  // CompressionStream is unavailable. The json payload:
+  //   { v:1, name, by?, fixed:[[type,x,y,extra?],...], plucked:[[...],...] }
+  // `extra` is at most ONE of: number = angle (rot parts), string = dir
+  // (dir parts, default omitted), false = a cold candle. Decoding trusts
+  // NOTHING: every field is validated and copied into fresh objects, so no
+  // foreign key (e.g. __proto__) ever reaches game state.
+  // ---------------------------------------------------------------------------
+  const PUZZLE_FORMAT_V = 1;
+  const PUZZLE_MAX_PARTS = 100;   // perf guard: no puzzle needs more
+  const PUZZLE_MAX_CODE = 20000;  // chars, before any decoding
+  const PUZZLE_MAX_JSON = 262144; // bytes after inflate (zip-bomb guard)
+
+  const B64U = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  function b64uEncode(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 3) {
+      const a = bytes[i], b = i + 1 < bytes.length ? bytes[i + 1] : 0, c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+      s += B64U[a >> 2] + B64U[((a & 3) << 4) | (b >> 4)];
+      if (i + 1 < bytes.length) s += B64U[((b & 15) << 2) | (c >> 6)];
+      if (i + 2 < bytes.length) s += B64U[c & 63];
+    }
+    return s;
+  }
+  function b64uDecode(s) {
+    if (s.length % 4 === 1) throw new Error('bad-format');
+    const idx = new Array(s.length);
+    for (let i = 0; i < s.length; i++) {
+      idx[i] = B64U.indexOf(s[i]);
+      if (idx[i] < 0) throw new Error('bad-format');
+    }
+    const out = new Uint8Array(Math.floor(s.length * 3 / 4));
+    let o = 0;
+    for (let i = 0; i + 1 < s.length; i += 4) {
+      out[o++] = (idx[i] << 2) | (idx[i + 1] >> 4);
+      if (i + 2 < s.length) out[o++] = ((idx[i + 1] & 15) << 4) | (idx[i + 2] >> 2);
+      if (i + 3 < s.length) out[o++] = ((idx[i + 2] & 3) << 6) | idx[i + 3];
+    }
+    return out;
+  }
+
+  // Run bytes through a (De)CompressionStream, capping the output size so a
+  // hostile tiny code can't inflate into a memory bomb.
+  async function pipeBytes(bytes, Ctor, maxLen) {
+    const reader = new Blob([bytes]).stream().pipeThrough(new Ctor('deflate-raw')).getReader();
+    const chunks = []; let total = 0;
+    for (;;) {
+      const r = await reader.read();
+      if (r.done) break;
+      total += r.value.length;
+      if (maxLen && total > maxLen) { reader.cancel(); throw new Error('bad-format'); }
+      chunks.push(r.value);
+    }
+    const out = new Uint8Array(total);
+    let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return out;
+  }
+
+  // Validate one part's fields; returns a FRESH spec object or throws.
+  function puzzleCheckPart(type, x, y, extra) {
+    if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(PART_DEFS, type)
+      || type === 'sparkle') throw new Error('newer-version'); // unknown part: likely a newer game
+    const def = PART_DEFS[type];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('bad-data');
+    x = Math.round(x); y = Math.round(y);
+    if (x < 0 || x > WORLD.w || y < 0 || y > WORLD.h) throw new Error('bad-data');
+    const spec = { type, x, y };
+    if (extra !== undefined) {
+      if (typeof extra === 'number' && def.rot && Number.isFinite(extra)) {
+        spec.angle = ((Math.round(extra) % 360) + 360) % 360;
+      } else if (typeof extra === 'string' && def.dir && def.dir.indexOf(extra) >= 0) {
+        spec.dir = extra;
+      } else if (extra === false && type === 'candle') {
+        spec.lit = false;
+      } else throw new Error('bad-data');
+    }
+    return spec;
+  }
+
+  // The single optional `extra` slot of a local spec (encode side; junk fields
+  // on non-applicable parts are silently dropped — local data is trusted-ish).
+  function puzzleExtra(spec) {
+    const def = PART_DEFS[spec.type];
+    if (spec.type === 'candle' && spec.lit === false) return false;
+    if (def && def.dir && spec.dir != null && spec.dir !== def.dir[0]) return spec.dir;
+    if (def && def.rot && spec.angle) return ((Math.round(spec.angle) % 360) + 360) % 360 || undefined;
+    return undefined;
+  }
+  function puzzleTuple(spec) {
+    const extra = puzzleExtra(spec);
+    return extra === undefined ? [spec.type, spec.x, spec.y] : [spec.type, spec.x, spec.y, extra];
+  }
+
+  const stripText = (s, max) => typeof s === 'string'
+    ? s.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, max) : '';
+
+  // Normalize + validate a whole puzzle (object specs OR wire tuples).
+  function puzzleSanitize(p) {
+    if (!p || typeof p !== 'object') throw new Error('bad-data');
+    const name = stripText(p.name, 24) || 'Puzzle';
+    const by = stripText(p.by, 12);
+    const rows = { fixed: [], plucked: [] };
+    for (const key of ['fixed', 'plucked']) {
+      const arr = p[key];
+      if (!Array.isArray(arr)) throw new Error('bad-data');
+      for (const s of arr) {
+        if (Array.isArray(s)) {
+          if (s.length < 3 || s.length > 4) throw new Error('bad-data');
+          rows[key].push(puzzleCheckPart(s[0], s[1], s[2], s.length > 3 ? s[3] : undefined));
+        } else if (s && typeof s === 'object') {
+          rows[key].push(puzzleCheckPart(s.type, s.x, s.y, puzzleExtra(s)));
+        } else throw new Error('bad-data');
+      }
+    }
+    const all = rows.fixed.concat(rows.plucked);
+    if (all.length > PUZZLE_MAX_PARTS) throw new Error('bad-data');
+    if (!rows.plucked.length) throw new Error('bad-data');           // no tray = not a puzzle
+    if (!all.some(s => s.type === 'berry') || !all.some(s => s.type === 'bowl'))
+      throw new Error('bad-data');                                    // the catch goal needs both
+    return { name, by, fixed: rows.fixed, plucked: rows.plucked };
+  }
+
+  async function puzzleEncode(p) {
+    const clean = puzzleSanitize(p);
+    const payload = { v: PUZZLE_FORMAT_V, name: clean.name };
+    if (clean.by) payload.by = clean.by;
+    payload.fixed = clean.fixed.map(puzzleTuple);
+    payload.plucked = clean.plucked.map(puzzleTuple);
+    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+    if (typeof CompressionStream === 'function') {
+      return 'LORY1.' + b64uEncode(await pipeBytes(bytes, CompressionStream));
+    }
+    return 'LORY0.' + b64uEncode(bytes); // ancient browser: plain but valid
+  }
+
+  async function puzzleDecode(code) {
+    if (typeof code !== 'string' || code.length > PUZZLE_MAX_CODE) throw new Error('bad-format');
+    const m = /^LORY(\d+)\.([A-Za-z0-9\-_]+)$/.exec(code.trim());
+    if (!m) throw new Error('bad-format');
+    let bytes = b64uDecode(m[2]);
+    if (m[1] === '1') {
+      if (typeof DecompressionStream !== 'function') throw new Error('newer-version');
+      try { bytes = await pipeBytes(bytes, DecompressionStream, PUZZLE_MAX_JSON); }
+      catch (e) { throw new Error('bad-format'); }
+    } else if (m[1] !== '0') throw new Error('newer-version');
+    if (bytes.length > PUZZLE_MAX_JSON) throw new Error('bad-format');
+    let payload;
+    try { payload = JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { throw new Error('bad-format'); }
+    if (!payload || typeof payload !== 'object' || payload.v !== PUZZLE_FORMAT_V) throw new Error('newer-version');
+    return puzzleSanitize(payload);
+  }
+
+  // Stable identity for import dedupe: same name+author+layout = same puzzle.
+  function puzzleCanonical(p) {
+    const clean = puzzleSanitize(p);
+    return JSON.stringify([clean.name, clean.by, clean.fixed.map(puzzleTuple), clean.plucked.map(puzzleTuple)]);
+  }
+
+  const puzzleCode = {
+    FORMAT: PUZZLE_FORMAT_V,
+    encode: puzzleEncode,
+    decode: puzzleDecode,
+    canonical: puzzleCanonical,
+  };
+
+  return { PART_DEFS, MATERIAL, WORLD, makePart, createSim, simulate, placementOverlaps, puzzleCode, Matter };
 });
