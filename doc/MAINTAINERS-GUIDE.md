@@ -360,7 +360,7 @@ body with `isBerry` overlaps a `bowl_sensor`, `caughtFrames++`.
 has speed < 0.25 px/f (angular velocity counts, scaled ×30) for **100
 consecutive frames**, `state.settled = true`. The game treats settled (or
 t > 45 s) as "try again". The sandbox instead reads `quietFrames` directly
-and auto-stops the run back to edit mode after **150 quiet frames** (~2.5 s)
+and auto-stops the run back to edit mode after **90 quiet frames** (~1.5 s)
 — the ◼ button still stops it earlier. A burning fuse, a flaring match, a
 spraying hydrant or a firing laser suppresses the quiet counter (pending
 action is not "stuck").
@@ -767,7 +767,7 @@ S.phase (game screen): 'edit' | 'run' | 'won'
 - **run**: fixed-step accumulator inside `frame()` (max 3 catch-up steps per
   rAF; accumulator clamped at 100 ms). Events go to audio + render. Win →
   `onWin()`; settled/timeout (45 s) → `onStuck()`; the sandbox instead
-  auto-stops (plain `stopRun`) after 150 quiet frames (~2.5 s).
+  auto-stops (plain `stopRun`) after 90 quiet frames (~1.5 s).
 - **won**: input frozen; `S.winTimer` (1.4 s) then shows the overlay.
   `stopRun()` clears BOTH 'run' and 'won' phases and cancels `winTimer` —
   this prevents two historical bugs (win card painting over level select;
@@ -849,7 +849,7 @@ silently. All shapes are defaulted on load — never assume fields exist.
   Start fresh; sound effects toggle only in the in-game topbar (`#sfxBtn`).
 - **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (29 entries incl. the machine shop and
   fixed-only parts); no "try again" stuck flow, but the run auto-stops back
-  to edit after ~2.5 s of stillness (§4.4); win events celebrate (confetti +
+  to edit after ~1.5 s of stillness (§4.4); win events celebrate (confetti +
   reset of `won/caughtFrames/bellRung`) but never end the run.
 - **Puzzle maker**: `S.pluckMode`. Flow: validate berry+bowl exist → taps
   toggle `spec._plucked` → 💾 opens the name dialog (Enter=save, Esc=cancel,

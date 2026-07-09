@@ -1275,8 +1275,8 @@
         }
         if (S.sim.state.won) { onWin(); break; }
         if (S.sandbox) {
-          // sandbox autostop: nothing has moved for ~2.5s — the show is over
-          if (S.sim.state.quietFrames >= 150) { stopRun(true); break; }
+          // sandbox autostop: nothing has moved for ~1.5s — the show is over
+          if (S.sim.state.quietFrames >= 90) { stopRun(true); break; }
         } else if (S.sim.state.settled || S.sim.state.t > 45) { onStuck(); break; }
       }
       if (S.runAcc > 100) S.runAcc = 0;
