@@ -362,9 +362,9 @@
     root.innerHTML = `<div class="screen levels-screen">
       <div class="lv-head"><button class="chip btn" id="homeBtn">←</button><h2 id="lvTitle">Pick a puzzle!</h2></div>
       <div class="grid" id="grid"></div>
-      <div class="lv-mine" id="mineWrap"><h3>🧩 My puzzles
-        <button class="chip btn" id="pzImportBtn" title="Open a puzzle file">📥</button>
-        <button class="chip btn" id="pzBackupBtn" title="Save all my puzzles to a file" style="display:none">📦</button></h3>
+      <div class="lv-mine" id="mineWrap"><h3><span>🧩 My puzzles</span><span class="spacer"></span>
+        <button class="chip btn" id="pzImportBtn" title="Open a puzzle file">📥 Open file</button>
+        <button class="chip btn" id="pzBackupBtn" title="Save all my puzzles to a file" style="display:none">📦 Save all</button></h3>
         <div class="grid" id="mineGrid"></div></div>
     </div>`;
     const grid = $('#grid');
@@ -750,20 +750,29 @@
     const root = $('.overlay-root');
     root.style.pointerEvents = 'auto';
     root.innerHTML = `
-      <div class="dim-bg"></div>
+      <div class="dim-bg" id="pzShareDim"></div>
       <div class="wincard namecard">
-        <h2>📤 Share this puzzle!</h2>
+        <button class="modal-x" id="pzShareClose" title="Close">✕</button>
+        <h2>📤 Share!</h2>
+        <p class="pz-share-name" id="pzShareName"></p>
         <input id="pzLink" readonly>
-        <div class="row">
-          ${navigator.share ? '<button class="big leaf" id="pzShareNative">📱&ensp;Share</button>' : ''}
-          <button class="big blue" id="pzCopy">🔗&ensp;Copy link</button>
-          <button class="big blue" id="pzFile">📦&ensp;To file</button>
-          <button class="big" id="pzShareClose">✕</button>
+        <div class="row wrap">
+          ${navigator.share ? '<button class="chip btn labeled" id="pzShareNative">📱 Share</button>' : ''}
+          <button class="chip btn labeled" id="pzCopy">🔗 Copy link</button>
+          <button class="chip btn labeled" id="pzFile">📦 To file</button>
         </div>
       </div>`;
+    $('#pzShareName').textContent = `“${p.name}”`;
     $('#pzLink').value = url;
-    const close = () => { root.innerHTML = ''; root.style.pointerEvents = 'none'; if (S.screen === 'levels') showLevelSelect(); };
+    const onEsc = (e) => { if (e.key === 'Escape') { A.sfx('button'); close(); } };
+    const close = () => {
+      document.removeEventListener('keydown', onEsc);
+      root.innerHTML = ''; root.style.pointerEvents = 'none';
+      if (S.screen === 'levels') showLevelSelect();
+    };
+    document.addEventListener('keydown', onEsc);
     $('#pzShareClose').onclick = () => { A.sfx('button'); close(); };
+    $('#pzShareDim').onclick = () => { A.sfx('button'); close(); };
     $('#pzCopy').onclick = async () => {
       A.sfx('button');
       try { await navigator.clipboard.writeText(url); toast('Link copied! Send it to a friend 🧡', 4); }
