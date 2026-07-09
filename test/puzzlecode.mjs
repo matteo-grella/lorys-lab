@@ -86,7 +86,12 @@ await rejects('corrupt deflate stream', 'LORY1.AAAAAAAA', 'bad-format');
   await rejects('payload v:2', await mk(Object.assign({}, base, { v: 2 })), 'newer-version');
   await rejects('unknown part type', await mk(Object.assign({}, base, { plucked: [['tnt', 400, 500]] })), 'newer-version');
   await rejects('__proto__ as part type', await mk(Object.assign({}, base, { plucked: [['__proto__', 400, 500]] })), 'newer-version');
-  await rejects('sparkle smuggled in', await mk(Object.assign({}, base, { plucked: [['sparkle', 400, 500]] })), 'newer-version');
+  // sparkles are legal puzzle content (placeable in the sandbox as of SW v21)
+  {
+    const withStar = await mk(Object.assign({}, base, { fixed: [['berry', 100, 100], ['bowl', 900, 655], ['sparkle', 400, 300]] }));
+    const back = await PC.decode(withStar);
+    check('sparkle accepted as puzzle content', back.fixed.some(s => s.type === 'sparkle'));
+  }
   await rejects('x out of board', await mk(Object.assign({}, base, { plucked: [['plank', 99999, 500]] })), 'bad-data');
   await rejects('non-finite y', await mk(Object.assign({}, base, { plucked: [['plank', 400, null]] })), 'bad-data');
   await rejects('angle on a non-rot part', await mk(Object.assign({}, base, { plucked: [['bumper', 400, 500, 45]] })), 'bad-data');

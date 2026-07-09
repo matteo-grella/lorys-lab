@@ -222,7 +222,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `bell` | r 30 | ✓ | fixed-only* | – | – | ring goal |
 | `balloon_goal` | r 24 | dynamic | fixed-only* | – | – | tethered goal balloon |
 | `spikes` | 56×64 | ✓ | fixed-only* | – | – | potted cactus; pops balloons; `angle:180` = hanging |
-| `sparkle` | r 14 | sensor | auto | – | – | created from `level.sparkles` |
+| `sparkle` | r 14 | sensor | ✓ (sandbox)\* | – | – | created from `level.sparkles` in campaign levels, or placed as a part in the sandbox (author-only: not pluckable); the star chip shows whenever the sim has `sparkleTotal > 0` |
 
 ⚠ **Bowl height caveat**: `PART_DEFS.bowl` says `h: 70` — that value is used by
 the *editor* (`specInvalid` footprint, ghost drawing). But `makePart` hard-codes
@@ -232,7 +232,8 @@ change both places.
 
 \* "fixed-only" parts are still placeable **in the sandbox** — the sandbox tray
 (`SANDBOX_TRAY` in game.js) explicitly includes berry/bowl/bell/balloon_goal/
-spikes/shelf/wall so users can build their own puzzles.
+spikes/shelf/wall/sparkle so users can build their own puzzles (sparkles are
+author-only: never pluckable into the player tray).
 
 **Exact material properties** (from `makePart`; keep this table in sync if you
 change the code):
@@ -590,7 +591,10 @@ Four traps, all hit in production here:
    all physics) freezes while your timer-based waits race ahead. Fix in the
    seed script, before game.js loads:
    `window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);`
-   — physics and waits then share one virtual clock.
+   — physics and waits then share one virtual clock. Caveat: canvas pixels
+   drawn this way don't composite into `--screenshot` captures — use virtual
+   time + `--dump-dom` for state assertions, and real-time `--timeout` runs
+   (no polyfill) for canvas screenshots.
 2. **Synthetic pointers can't be captured**: `cv.setPointerCapture(id)`
    throws for a dispatched `PointerEvent`'s fake pointerId, killing
    `onPointerDown` before it does anything. Stub
@@ -686,7 +690,7 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   `uiBoost`, 1 on desktop/iPad, up to 1.7 on phones) — all sizes and the
   returned hit radii scale by it.
 - **Tray**: `drawTray(c, tray, o, dragType, boost)` computes adaptive well
-  sizes (`wellW = min(88*boost, (viewW-30)/n)` — the 28-well sandbox is width-bound
+  sizes (`wellW = min(88*boost, (viewW-30)/n)` — the 29-well sandbox is width-bound
   on desktop and gains room on full-bleed phones) and returns well hit-regions
   `{type, x, y, w, count}`.
 - **`draw(frame)`** is the single entry point; frame =
@@ -790,8 +794,8 @@ S.phase (game screen): 'edit' | 'run' | 'won'
   placements **by value** (`type + x + y + angle + dir`) because `createSim`
   stores spec *copies*. If you add a spec field that changes during simulation,
   matching will break — don't. It filters out sensor bodies (invisible helper
-  zones must not steal taps) with ONE exception: the fuse, whose only body IS
-  a sensor — drop that exception and fuses become unselectable forever.
+  zones must not steal taps) with TWO exceptions: fuse and sparkle, whose only
+  body IS a sensor — drop those and they become unselectable forever.
 - **Selection**: index into `S.placements`; canvas-drawn buttons (from
   `R.draw`) are hit-tested first on pointerdown. Rotation: ⟲/⟳ buttons ±15°,
   `R`/`Shift+R` keys, mouse wheel ±5° (only parts with `defs.rot`).
@@ -843,7 +847,7 @@ silently. All shapes are defaulted on load — never assume fields exist.
   `puzzleWins`, `puzzleSeq` but **keeps settings** (mode/sfx/music/juice).
   The title screen carries only a music toggle (`#tMusic`, labeled) next to
   Start fresh; sound effects toggle only in the in-game topbar (`#sfxBtn`).
-- **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (28 entries incl. the machine shop and
+- **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (29 entries incl. the machine shop and
   fixed-only parts); no "try again" stuck flow, but the run auto-stops back
   to edit after ~2.5 s of stillness (§4.4); win events celebrate (confetti +
   reset of `won/caughtFrames/bellRung`) but never end the run.
@@ -860,9 +864,11 @@ silently. All shapes are defaulted on load — never assume fields exist.
 - **Playing a user puzzle**: `S.puzzle` set ⇒ `currentLevel()` synthesizes a
   def: goal always `catch`, tray derived by grouping `plucked` by type,
   `solution` = the author's `plucked` placements (powers hints), no
-  sparkles; star chip hidden, hints fully active (same mode logic as the
+  sparkles from `level.sparkles` (author-placed sparkle PARTS ride along in
+  `fixed` and count normally — the star chip shows and the win overlay
+  awards real stars); hints fully active (same mode logic as the
   campaign, no skip); win records `puzzleWins[id]` and
-  shows the custom "You fed Lory!" overlay.
+  shows the custom "You fed Lory!" overlay (🧩 badge when starless).
 - **Puzzle sharing** (`core.js puzzleCode` + game.js): wire format
   `LORY1.<base64url(deflate-raw(json))>` (`LORY0.` = uncompressed fallback);
   payload `{v, name, by?, fixed:[[type,x,y,extra?]…], plucked:[…]}` where

@@ -98,7 +98,7 @@
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
     ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
-    ['balloon_goal', 4], ['spikes', 2],
+    ['balloon_goal', 4], ['spikes', 2], ['sparkle', 3],
   ];
 
   function currentLevel() {
@@ -238,15 +238,19 @@
     $('#levelChip').textContent = S.puzzle ? `🧩 ${S.puzzle.name}`
       : S.sandbox ? '🎨 Sandbox' : `${S.levelIndex + 1}. ${L.title}${stars}`;
     $('#hintBtn').style.display = S.sandbox ? 'none' : '';
-    $('#starChip').style.display = (S.sandbox || S.puzzle) ? 'none' : '';
+    // star chip: driven by updateStarChip — any scene with sparkles shows it
     $('#puzzleBtn').style.display = S.sandbox ? '' : 'none';
     $('#puzzleBtn').textContent = S.pluckMode ? '💾 Save puzzle' : '🧩 Make puzzle';
     $('#pluckExitBtn').style.display = S.pluckMode ? '' : 'none';
     updateStarChip();
   }
   function updateStarChip() {
-    if (S.sandbox || !S.sim) return;
-    $('#starChip').textContent = `⭐ ${S.sim.state.sparkles}/3`;
+    if (!S.sim) return;
+    const chip = $('#starChip');
+    if (!chip) return;
+    const total = S.sim.state.sparkleTotal;
+    chip.style.display = total > 0 && S.screen === 'game' ? '' : 'none';
+    chip.textContent = `⭐ ${S.sim.state.sparkles}/${total}`;
   }
 
   function toast(msg, secs) {
@@ -553,7 +557,7 @@
     // having to enter pluck mode — the only way to revert a mark when editing
     // a saved puzzle used to be hidden behind the 🧩 button
     const p = S.placements[S.selection];
-    if (!p || !S.sandbox) return;
+    if (!p || !S.sandbox || p.type === 'sparkle') return; // stars are author-only scenery
     if (p._plucked) delete p._plucked; else p._plucked = true;
     A.sfx(p._plucked ? 'pickup' : 'place');
     R.fx.poof(p.x, p.y, 4);
@@ -919,7 +923,8 @@
       persist();
       S.winTimer = setTimeout(() => {
         S.winTimer = null;
-        if (S.phase === 'won') showWinOverlay(stars, true);
+        // a puzzle that carries author-placed sparkles earns real stars
+        if (S.phase === 'won') showWinOverlay(stars, S.sim.state.sparkleTotal === 0);
       }, 1400);
       $('#playBtn').textContent = '▶';
       $('#playBtn').classList.remove('running');
@@ -1017,10 +1022,10 @@
 
   function hitPlacement(pt) {
     // topmost (last) placement whose body contains the point (with padding);
-    // sensors are invisible helper zones — except the fuse, whose ONLY body
-    // is a sensor: it must stay tappable or it can never be edited again
+    // sensors are invisible helper zones — except fuse and sparkle, whose
+    // ONLY body is a sensor: they must stay tappable or can't be edited
     const bodies = S.sim.bodies().filter(b => b.plugin.lab && b.plugin.lab.placed
-      && (!b.isSensor || b.plugin.lab.type === 'fuse'));
+      && (!b.isSensor || b.plugin.lab.type === 'fuse' || b.plugin.lab.type === 'sparkle'));
     const hits = Core.Matter.Query.point(bodies, pt);
     let body = hits[hits.length - 1];
     if (!body) {
@@ -1076,6 +1081,7 @@
       const idx = hitPlacement(bpt);
       if (idx >= 0) {
         const p = S.placements[idx];
+        if (p.type === 'sparkle') { toast('Stars stay in the scene — the player collects them!', 3); return; }
         p._plucked = !p._plucked;
         A.sfx(p._plucked ? 'pickup' : 'place');
         R.fx.poof(p.x, p.y, 4);

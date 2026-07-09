@@ -1458,8 +1458,9 @@
     // candles start lit or cold — the button icon shows what tapping DOES
     if (sel.type === 'candle') defsBtns.push({ id: 'lit', icon: sel.lit === false ? '🔥' : '💨', col: C.tangerine });
     // sandbox puzzle marks: 🧩 sends the part to the player's tray, 📌 pins it
-    // back into the scene (the escape hatch for editing a saved puzzle)
-    if (sandbox) defsBtns.push({ id: 'pluck', icon: sel._plucked ? '📌' : '🧩', col: C.leaf });
+    // back into the scene (the escape hatch for editing a saved puzzle).
+    // Sparkles are author-only scenery — never tray pieces.
+    if (sandbox && sel.type !== 'sparkle') defsBtns.push({ id: 'pluck', icon: sel._plucked ? '📌' : '🧩', col: C.leaf });
     defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
     const pitch = 54 * B;
     let total = defsBtns.length * pitch - 10 * B + 14 * B;
@@ -1484,7 +1485,7 @@
   }
 
   // tray. boost enlarges wells on small screens where the level's tray is
-  // small enough to still fit (the 28-well sandbox stays width-bound).
+  // small enough to still fit (the 29-well sandbox stays width-bound).
   function drawTray(c, tray, o, dragType, boost) {
     const B = boost || 1;
     const y0 = BOARD_H;

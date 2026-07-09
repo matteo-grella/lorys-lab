@@ -1197,8 +1197,8 @@
 
   // Validate one part's fields; returns a FRESH spec object or throws.
   function puzzleCheckPart(type, x, y, extra) {
-    if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(PART_DEFS, type)
-      || type === 'sparkle') throw new Error('newer-version'); // unknown part: likely a newer game
+    if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(PART_DEFS, type))
+      throw new Error('newer-version'); // unknown part: likely a newer game
     const def = PART_DEFS[type];
     if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('bad-data');
     x = Math.round(x); y = Math.round(y);
