@@ -1436,7 +1436,7 @@
 
   // selection halo + toy buttons (positions returned for hit-testing).
   // boost (>=1) enlarges buttons on small screens so fingers can hit them.
-  function drawSelection(c, sel, o, boost) {
+  function drawSelection(c, sel, o, boost, sandbox) {
     const B = boost || 1;
     const defs = window.LoryCore.PART_DEFS[sel.type];
     const w = (sel.w || defs.w || defs.r * 2), h = (sel.h || defs.h || defs.r * 2);
@@ -1457,6 +1457,9 @@
     if (defs.dir) defsBtns.push({ id: 'flip', icon: '⇄', col: C.tangerine });
     // candles start lit or cold — the button icon shows what tapping DOES
     if (sel.type === 'candle') defsBtns.push({ id: 'lit', icon: sel.lit === false ? '🔥' : '💨', col: C.tangerine });
+    // sandbox puzzle marks: 🧩 sends the part to the player's tray, 📌 pins it
+    // back into the scene (the escape hatch for editing a saved puzzle)
+    if (sandbox) defsBtns.push({ id: 'pluck', icon: sel._plucked ? '📌' : '🧩', col: C.leaf });
     defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
     const pitch = 54 * B;
     let total = defsBtns.length * pitch - 10 * B + 14 * B;
@@ -1602,7 +1605,7 @@
 
     // selection
     let selButtons = null;
-    if (selection) selButtons = drawSelection(ctx, selection, o, frame.uiBoost);
+    if (selection) selButtons = drawSelection(ctx, selection, o, frame.uiBoost, frame.sandbox);
 
     // drag ghost
     if (dragGhost) drawGhost(ctx, dragGhost, o, { invalid: dragGhost.invalid, lift: true });

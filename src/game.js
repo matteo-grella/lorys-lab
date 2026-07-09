@@ -160,7 +160,7 @@
     // deduct the scene from the sandbox stock
     for (const s of S.placements) { const t = trayItem(s.type); if (t) t.count = Math.max(0, t.count - 1); }
     rebuildSim();
-    setLory('think', `Editing "${p.name}"! Move things around, then press 🧩 and 💾 to save.`, 8);
+    setLory('think', `Editing "${p.name}"! Tap a part and use 🧩/📌 to change what the player places. Press 🧩 then 💾 to save.`, 10);
   }
 
   function setLory(pose, say, secs) {
@@ -207,7 +207,10 @@
     $('#backBtn').onclick = () => { A.sfx('button'); stopRun(); exitPluckMode(false); showScreen('levels'); };
     $('#hintBtn').onclick = onHint;
     $('#puzzleBtn').onclick = onPuzzleButton;
-    $('#pluckExitBtn').onclick = () => { A.sfx('button'); exitPluckMode(false); setLory('idle', null); };
+    // ✕ leaves marking mode. Editing a saved puzzle keeps its marks (wiping
+    // them silently destroyed the puzzle's hidden-parts choice); a fresh,
+    // never-saved marking session still cancels cleanly.
+    $('#pluckExitBtn').onclick = () => { A.sfx('button'); exitPluckMode(!!S.editingPuzzleId); setLory('idle', null); };
     $('#resetBtn').onclick = () => { A.sfx('button'); stopRun(); exitPluckMode(false); clearPlacements(); };
     $('#sfxBtn').onclick = () => {
       save.sfx = !save.sfx; A.setSfx(save.sfx); persist(); syncAudioBtns(); A.sfx('button');
@@ -530,6 +533,17 @@
     p.lit = p.lit === false;        // cold -> lit, lit (default) -> cold
     rebuildSim();
     A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
+  }
+  function togglePluckSelection() {
+    // sandbox: mark/unmark the selected part as a puzzle tray piece without
+    // having to enter pluck mode — the only way to revert a mark when editing
+    // a saved puzzle used to be hidden behind the 🧩 button
+    const p = S.placements[S.selection];
+    if (!p || !S.sandbox) return;
+    if (p._plucked) delete p._plucked; else p._plucked = true;
+    A.sfx(p._plucked ? 'pickup' : 'place');
+    R.fx.poof(p.x, p.y, 4);
+    rebuildSim();
   }
 
   // ---------------------------------------------------------------------------
@@ -879,6 +893,7 @@
         if (b.id === 'rotr') rotateSelection(1);
         if (b.id === 'flip') flipSelection();
         if (b.id === 'lit') toggleLitSelection();
+        if (b.id === 'pluck') togglePluckSelection();
         if (b.id === 'del') { A.sfx('pickup'); removePlacement(S.selection); }
         return;
       }
@@ -1077,6 +1092,7 @@
       running: S.phase === 'run',
       t: S.t, dt: dtMs / 1000,
       selection: S.phase === 'edit' ? sel : null,
+      sandbox: S.sandbox, // selection UI adds the 🧩/📌 puzzle-mark toggle
       dragGhost: S.drag ? Object.assign({ invalid: S.drag.invalid }, S.drag.spec) : null,
       hints: S.hints,
       tray: S.trayStock,

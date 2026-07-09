@@ -5191,7 +5191,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
   // selection halo + toy buttons (positions returned for hit-testing).
   // boost (>=1) enlarges buttons on small screens so fingers can hit them.
-  function drawSelection(c, sel, o, boost) {
+  function drawSelection(c, sel, o, boost, sandbox) {
     const B = boost || 1;
     const defs = window.LoryCore.PART_DEFS[sel.type];
     const w = (sel.w || defs.w || defs.r * 2), h = (sel.h || defs.h || defs.r * 2);
@@ -5212,6 +5212,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     if (defs.dir) defsBtns.push({ id: 'flip', icon: '⇄', col: C.tangerine });
     // candles start lit or cold — the button icon shows what tapping DOES
     if (sel.type === 'candle') defsBtns.push({ id: 'lit', icon: sel.lit === false ? '🔥' : '💨', col: C.tangerine });
+    // sandbox puzzle marks: 🧩 sends the part to the player's tray, 📌 pins it
+    // back into the scene (the escape hatch for editing a saved puzzle)
+    if (sandbox) defsBtns.push({ id: 'pluck', icon: sel._plucked ? '📌' : '🧩', col: C.leaf });
     defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
     const pitch = 54 * B;
     let total = defsBtns.length * pitch - 10 * B + 14 * B;
@@ -5357,7 +5360,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
     // selection
     let selButtons = null;
-    if (selection) selButtons = drawSelection(ctx, selection, o, frame.uiBoost);
+    if (selection) selButtons = drawSelection(ctx, selection, o, frame.uiBoost, frame.sandbox);
 
     // drag ghost
     if (dragGhost) drawGhost(ctx, dragGhost, o, { invalid: dragGhost.invalid, lift: true });
@@ -5568,7 +5571,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     // deduct the scene from the sandbox stock
     for (const s of S.placements) { const t = trayItem(s.type); if (t) t.count = Math.max(0, t.count - 1); }
     rebuildSim();
-    setLory('think', `Editing "${p.name}"! Move things around, then press 🧩 and 💾 to save.`, 8);
+    setLory('think', `Editing "${p.name}"! Tap a part and use 🧩/📌 to change what the player places. Press 🧩 then 💾 to save.`, 10);
   }
 
   function setLory(pose, say, secs) {
@@ -5615,7 +5618,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     $('#backBtn').onclick = () => { A.sfx('button'); stopRun(); exitPluckMode(false); showScreen('levels'); };
     $('#hintBtn').onclick = onHint;
     $('#puzzleBtn').onclick = onPuzzleButton;
-    $('#pluckExitBtn').onclick = () => { A.sfx('button'); exitPluckMode(false); setLory('idle', null); };
+    // ✕ leaves marking mode. Editing a saved puzzle keeps its marks (wiping
+    // them silently destroyed the puzzle's hidden-parts choice); a fresh,
+    // never-saved marking session still cancels cleanly.
+    $('#pluckExitBtn').onclick = () => { A.sfx('button'); exitPluckMode(!!S.editingPuzzleId); setLory('idle', null); };
     $('#resetBtn').onclick = () => { A.sfx('button'); stopRun(); exitPluckMode(false); clearPlacements(); };
     $('#sfxBtn').onclick = () => {
       save.sfx = !save.sfx; A.setSfx(save.sfx); persist(); syncAudioBtns(); A.sfx('button');
@@ -5938,6 +5944,17 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     p.lit = p.lit === false;        // cold -> lit, lit (default) -> cold
     rebuildSim();
     A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
+  }
+  function togglePluckSelection() {
+    // sandbox: mark/unmark the selected part as a puzzle tray piece without
+    // having to enter pluck mode — the only way to revert a mark when editing
+    // a saved puzzle used to be hidden behind the 🧩 button
+    const p = S.placements[S.selection];
+    if (!p || !S.sandbox) return;
+    if (p._plucked) delete p._plucked; else p._plucked = true;
+    A.sfx(p._plucked ? 'pickup' : 'place');
+    R.fx.poof(p.x, p.y, 4);
+    rebuildSim();
   }
 
   // ---------------------------------------------------------------------------
@@ -6287,6 +6304,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         if (b.id === 'rotr') rotateSelection(1);
         if (b.id === 'flip') flipSelection();
         if (b.id === 'lit') toggleLitSelection();
+        if (b.id === 'pluck') togglePluckSelection();
         if (b.id === 'del') { A.sfx('pickup'); removePlacement(S.selection); }
         return;
       }
@@ -6485,6 +6503,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       running: S.phase === 'run',
       t: S.t, dt: dtMs / 1000,
       selection: S.phase === 'edit' ? sel : null,
+      sandbox: S.sandbox, // selection UI adds the 🧩/📌 puzzle-mark toggle
       dragGhost: S.drag ? Object.assign({ invalid: S.drag.invalid }, S.drag.spec) : null,
       hints: S.hints,
       tray: S.trayStock,

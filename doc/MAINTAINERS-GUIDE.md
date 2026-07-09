@@ -631,8 +631,11 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   `{invalid, lift}` (red ✕ overlay when placement is illegal).
 - **Plucked parts** (puzzle maker): if `spec._plucked` is truthy the part
   renders at 35% alpha with an orange dashed box + 🧩 badge.
-- **Selection UI**: `drawSelection(c, sel, o, boost)` returns button
-  hit-circles (`{id:'rotl'|'rotr'|'flip'|'del', x, y, r:28*boost}`). Buttons
+- **Selection UI**: `drawSelection(c, sel, o, boost, sandbox)` returns button
+  hit-circles (`{id:'rotl'|'rotr'|'flip'|'lit'|'pluck'|'del', x, y, r:28*boost}`;
+  `lit` 🔥/💨 only on candles, `pluck` 🧩/📌 only in the sandbox — it toggles
+  `spec._plucked` without entering pluck mode, THE way to revert a saved
+  puzzle's hidden-part marks). Buttons
   render above the part, or **below** it when the part is near the top (they
   must never hide under the DOM topbar). The ✕ delete button gets extra
   spacing. `boost` is the mobile touch-target compensation (see game.js
@@ -801,7 +804,10 @@ silently. All shapes are defaulted on load — never assume fields exist.
   `fixed` (unmarked) / `plucked` (marked, becomes the tray), strips the
   `_plucked` flags, saves. `S.editingPuzzleId` set ⇒ update-in-place +
   clear that puzzle's win. `editPuzzleInSandbox(p)` restores the scene
-  (plucked parts re-marked) and deducts stock.
+  (plucked parts re-marked) and deducts stock. Marks are also editable
+  outside pluck mode via the selection 🧩/📌 button. ✕ (exit pluck mode)
+  wipes marks only for a never-saved session — while editing a saved
+  puzzle (`editingPuzzleId` set) it keeps them.
 - **Playing a user puzzle**: `S.puzzle` set ⇒ `currentLevel()` synthesizes a
   def: goal always `catch`, tray derived by grouping `plucked` by type, no
   sparkles/solution; hint & star chip hidden; win records `puzzleWins[id]` and
