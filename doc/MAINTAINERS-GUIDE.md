@@ -782,10 +782,13 @@ silently. All shapes are defaulted on load — never assume fields exist.
 - **Modes**: `sprout` = unlimited hints + free auto-hint after 2 failed runs;
   `whiz` = 2 hints/level. Both unlock levels sequentially.
 - **Hints**: `onHint()` copies `level.solution` into `S.hints` (ghosts,
-  8 s) and shows `hintText` in Lory's bubble. Hidden in sandbox & user puzzles.
-- **Skip**: `offerSkip()` after 4 failed runs; the button captures the level
-  index at creation and no-ops if the level changed; removed on `enterLevel`;
-  15 s auto-remove.
+  8 s) and shows `hintText` in Lory's bubble. Hidden in the sandbox only;
+  user puzzles use the author's `plucked` placements as the solution, so
+  hints (💡, mode limits, sprout auto-hint after 2 fails) behave exactly
+  like campaign levels.
+- **Skip**: `offerSkip()` after 4 failed runs (campaign only — never in
+  user puzzles); the button captures the level index at creation and
+  no-ops if the level changed; removed on `enterLevel`; 15 s auto-remove.
 - **Secret unlock**: `secretTick()` — 5 presses of `l` on the levels screen
   (or 5 taps on the "Pick a puzzle!" heading — both paths feed the same
   counter) within a rolling 2.5 s window toggles `save.allUnlocked`.
@@ -809,8 +812,10 @@ silently. All shapes are defaulted on load — never assume fields exist.
   wipes marks only for a never-saved session — while editing a saved
   puzzle (`editingPuzzleId` set) it keeps them.
 - **Playing a user puzzle**: `S.puzzle` set ⇒ `currentLevel()` synthesizes a
-  def: goal always `catch`, tray derived by grouping `plucked` by type, no
-  sparkles/solution; hint & star chip hidden; win records `puzzleWins[id]` and
+  def: goal always `catch`, tray derived by grouping `plucked` by type,
+  `solution` = the author's `plucked` placements (powers hints), no
+  sparkles; star chip hidden, hints fully active (same mode logic as the
+  campaign, no skip); win records `puzzleWins[id]` and
   shows the custom "You fed Lory!" overlay.
 
 ---

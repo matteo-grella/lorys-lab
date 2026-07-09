@@ -107,7 +107,10 @@
       for (const p of S.puzzle.plucked) counts[p.type] = (counts[p.type] || 0) + 1;
       return {
         title: S.puzzle.name, goalType: 'catch', goalText: 'Feed Lory the berry!',
-        fixed: S.puzzle.fixed, sparkles: [], solution: [], hintText: '',
+        // the author's own placement of the plucked parts IS the solution, so
+        // hints work exactly like campaign levels (💡, modes, auto-hint)
+        fixed: S.puzzle.fixed, sparkles: [], solution: S.puzzle.plucked,
+        hintText: 'Psst — this is how the puzzle maker built it! Your way can work too!',
         tray: Object.entries(counts).map(([type, count]) => ({ type, count })),
       };
     }
@@ -234,7 +237,7 @@
     const stars = prog && !S.sandbox && !S.puzzle ? '  ' + '★'.repeat(prog.stars) : '';
     $('#levelChip').textContent = S.puzzle ? `🧩 ${S.puzzle.name}`
       : S.sandbox ? '🎨 Sandbox' : `${S.levelIndex + 1}. ${L.title}${stars}`;
-    $('#hintBtn').style.display = (S.sandbox || S.puzzle) ? 'none' : '';
+    $('#hintBtn').style.display = S.sandbox ? 'none' : '';
     $('#starChip').style.display = (S.sandbox || S.puzzle) ? 'none' : '';
     $('#puzzleBtn').style.display = S.sandbox ? '' : 'none';
     $('#puzzleBtn').textContent = S.pluckMode ? '💾 Save puzzle' : '🧩 Make puzzle';
@@ -641,7 +644,7 @@
   }
 
   function onHint() {
-    if (S.sandbox || S.puzzle || S.phase !== 'edit') return;
+    if (S.sandbox || S.phase !== 'edit') return;
     const L = currentLevel();
     const limit = save.mode === 'whiz' ? 2 : Infinity;
     if (S.hintsUsed >= limit) { setLory('think', "I already told you my best idea! You can do it!", 4); return; }
@@ -753,12 +756,12 @@
     A.sfx('lose');
     setLory('oops', ["Hmm, not quite! Try moving something.", "So close! Maybe tilt it differently?", "Almost! Machines take a few tries."][Math.min(S.failCount - 1, 2)], 5);
     stopRun();
-    if (!S.sandbox && !S.puzzle) {
+    if (!S.sandbox) {
       if (save.mode === 'sprout' && S.failCount === 2) {
         onHint(); S.hintsUsed = 0; // free auto-hint for little inventors
       }
       if (S.failCount >= 3) toast('Stuck? The 💡 button shows Lory’s idea!', 4);
-      if (S.failCount >= 4) offerSkip();
+      if (S.failCount >= 4 && !S.puzzle) offerSkip(); // skip is campaign-only
     }
   }
 
@@ -1192,7 +1195,7 @@
 
   // tiny read-only debug handle (used by automated tests)
   window.__loryDebug = {
-    get state() { return { screen: S.screen, phase: S.phase, selection: S.selection, placements: S.placements.map(p => Object.assign({}, p)), tray: S.trayStock.map(t => Object.assign({}, t)), cam: Object.assign({}, cam), viewW, ox: boardOX() }; },
+    get state() { return { screen: S.screen, phase: S.phase, selection: S.selection, placements: S.placements.map(p => Object.assign({}, p)), tray: S.trayStock.map(t => Object.assign({}, t)), hints: S.hints ? S.hints.length : 0, cam: Object.assign({}, cam), viewW, ox: boardOX() }; },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
