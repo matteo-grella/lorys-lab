@@ -93,7 +93,7 @@ lorys-lab/
 │                            path — the filename rotates when the artifact URL
 │                            has to be re-minted; check build.mjs for current)
 ├── test/
-│   ├── smoke.mjs            63 physics behaviour proofs (run in Node)
+│   ├── smoke.mjs            66 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   ├── puzzlecode.mjs       puzzle wire-format roundtrip + hostile-input proofs
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
@@ -303,9 +303,10 @@ Executed **before** each `Engine.update`:
   laser beam → bulb tick → lens feed (both share `castBeam`) → fist cooldown. New events: `snip {cause:'blade'|'fire'}`,
   `ignite`, `extinguish`, `switch_on/off`, `thwack`, `water_on/off`, `laser`, `bulb_on/off`. A burning
   fuse, a flaring match, a spraying hydrant or a firing laser/lens suppresses
-  the quiescence detector (pending action is not "stuck"). The `'water'`
-  audio loop is event-driven: `water_on`/`water_off` start/stop it inside
-  audio.js `handleEvents` (NOT in game.js `startLoops`).
+  the quiescence detector (pending action is not "stuck"). The `'water'` and `'fan'`
+  audio loops are event-driven: `water_on/off` and `fan_on/off` start/stop
+  them inside audio.js `handleEvents` (NOT in game.js `startLoops`, which
+  only catches up already-running fans when sfx re-enables mid-run).
 - **Conveyor drive.** For each active collision pair involving a conveyor:
   the other body's x-velocity is steered toward `±3.2` by at most 0.4 px/f²
   per frame, and its angular velocity is damped ×0.9 (so balls ride instead of
@@ -396,6 +397,7 @@ The game forwards them to `LoryAudio.handleEvents()` and
 | `water_on` / `water_off` | x, y | hydrant valve opens/closes | audio (water loop start/stop), render (ring/poof); droplet FX read `lab.hyd.active` directly |
 | `laser` | x, y | cannon OR lens starts firing (touch burst, switch edge, light feed) | audio (PEW zap), render (ring + stars); the beam itself is drawn from `lab.laz.beamLen`/`lab.lens.beamLen`, not the event |
 | `bulb_on` / `bulb_off` | x, y | bulb toggled (button press or wired switch) | audio (switch clicks), render (sunny ring / poof) |
+| `fan_on` / `fan_off` | x, y | a fan's effective running state changed (start, switch press/release, spec.on) | audio (hum loop start/stop); render: deliberately none — the blades are the visual |
 
 If you add an event type, update **both** consumers or nothing will happen —
 they ignore unknown types silently.
@@ -545,7 +547,7 @@ new total) before you build.
 Run everything from the project root:
 
 ```bash
-node test/smoke.mjs      # 63 physics behaviour proofs — every part & interaction
+node test/smoke.mjs      # 66 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
 node test/puzzlecode.mjs # puzzle wire-format roundtrip + hostile-input proofs
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext
@@ -553,7 +555,7 @@ node --check src/*.js    # syntax gate for every module
 node build.mjs           # regenerates dist/ (see §10)
 ```
 
-**Definition of green**: smoke N/N (currently 63/63), verify N/N (currently 24/24),
+**Definition of green**: smoke N/N (currently 66/66), verify N/N (currently 24/24),
 puzzlecode N/N (currently 35/35), audio-shape passes, all `--check`s pass.
 
 ### Browser E2E (Playwright, or bare headless Chrome)

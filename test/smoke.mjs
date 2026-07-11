@@ -714,13 +714,17 @@ function run(level, placements, seconds = 12, watch = null) {
       ...(extra || []),
     ],
   });
-  const stopped = Core.simulate(level({ type: 'fan', x: 320, y: 460, dir: 'right', on: false }), [], { maxSeconds: 8 });
+  const stopped = Core.simulate(level({ type: 'fan', x: 320, y: 460, dir: 'right', on: false }), [], { maxSeconds: 8, collectEvents: true });
   check('stopped fan never blows (ball stays, bell silent)', !stopped.won && stopped.settled);
+  check('stopped fan never announces a hum (no fan_on)', !stopped.events.some(e => e.type === 'fan_on'));
   const wired = Core.simulate(
     level({ type: 'fan', x: 320, y: 460, dir: 'right', on: false },
       [{ type: 'switch', x: 320, y: 680 }]),
-    [{ type: 'ball_marble', x: 320, y: 600 }], { maxSeconds: 8 });
+    [{ type: 'ball_marble', x: 320, y: 600 }], { maxSeconds: 8, collectEvents: true });
   check('weight on the plate wakes the stopped fan -> bell rings', wired.won, `t=${wired.seconds}s`);
+  check('waking mid-run emits fan_on (drives the hum)', wired.events.some(e => e.type === 'fan_on'));
+  const plain = Core.simulate(level({ type: 'fan', x: 320, y: 460, dir: 'right' }), [], { maxSeconds: 4, collectEvents: true });
+  check('a default fan hums from the first frame', plain.events.some(e => e.type === 'fan_on'));
 }
 
 const fails = results.filter(r => !r.pass);

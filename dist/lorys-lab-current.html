@@ -941,8 +941,15 @@
           const fanBody = p.bodies[0];
           const m = lab(fanBody);
           // spec.on === false places the fan stopped: only a wired switch can
-          // run it (the switch always takes over, exactly as before)
-          if (m.switchControlled ? !m.poweredNow : spec.on === false) continue;
+          // run it (the switch always takes over, exactly as before). The
+          // running state drives the hum via fan_on/fan_off events, so a fan
+          // woken mid-run by its switch hums from that moment.
+          const running = m.switchControlled ? !!m.poweredNow : spec.on !== false;
+          if (running !== !!m.fanWas) {
+            m.fanWas = running;
+            state.events.push({ type: running ? 'fan_on' : 'fan_off', x: fanBody.position.x, y: fanBody.position.y });
+          }
+          if (!running) continue;
           const dv = dirVector(m.dir);
           const fx = fanBody.position.x, fy = fanBody.position.y;
           const cx = fx + dv.x * (28 + FAN_REACH / 2);
@@ -3984,6 +3991,8 @@
         case 'extinguish': sfx('extinguishHiss'); break;
         case 'water_on': startLoop('water'); break;
         case 'water_off': stopLoop('water'); break;
+        case 'fan_on': startLoop('fan'); break;
+        case 'fan_off': stopLoop('fan'); break;
       }
     }
   }
@@ -5180,6 +5189,8 @@
         case 'switch_off': fx.ring(e.x, e.y, C.inkSoft); break;
         case 'water_on': fx.ring(e.x, e.y, C.sky); break;
         case 'water_off': fx.poof(e.x, e.y - 20, 3); break;
+        // fan_on/fan_off: audio-only (hum loop) — the spinning blades and
+        // wind-zone dashes ARE the visual, no extra FX needed
         case 'thwack':
           fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 5); fx.poof(e.x, e.y + 10, 4);
           if (e.bodyId != null) squash.set(e.bodyId, { t: 0, nx: 0, ny: 1, amt: 0.3 });
@@ -6712,9 +6723,10 @@
   function startLoops() {
     for (const p of S.sim.parts) {
       const m = p.bodies[0].plugin.lab;
-      // a fan that starts silent (placed stopped, or waiting on its wired
-      // switch) doesn't hum; hydrant water is event-driven (water_on/off)
-      if (p.spec.type === 'fan' && (m.switchControlled ? m.poweredNow : p.spec.on !== false)) A.startLoop('fan');
+      // the fan hum is event-driven (fan_on/fan_off, like hydrant water);
+      // here we only catch up fans ALREADY running — needed when sfx is
+      // re-enabled mid-run, after their fan_on already fired
+      if (p.spec.type === 'fan' && m.fanWas) A.startLoop('fan');
       if (p.spec.type === 'conveyor') A.startLoop('conveyor');
     }
   }

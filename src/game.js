@@ -918,9 +918,10 @@
   function startLoops() {
     for (const p of S.sim.parts) {
       const m = p.bodies[0].plugin.lab;
-      // a fan that starts silent (placed stopped, or waiting on its wired
-      // switch) doesn't hum; hydrant water is event-driven (water_on/off)
-      if (p.spec.type === 'fan' && (m.switchControlled ? m.poweredNow : p.spec.on !== false)) A.startLoop('fan');
+      // the fan hum is event-driven (fan_on/fan_off, like hydrant water);
+      // here we only catch up fans ALREADY running — needed when sfx is
+      // re-enabled mid-run, after their fan_on already fired
+      if (p.spec.type === 'fan' && m.fanWas) A.startLoop('fan');
       if (p.spec.type === 'conveyor') A.startLoop('conveyor');
     }
   }

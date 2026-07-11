@@ -741,8 +741,15 @@
           const fanBody = p.bodies[0];
           const m = lab(fanBody);
           // spec.on === false places the fan stopped: only a wired switch can
-          // run it (the switch always takes over, exactly as before)
-          if (m.switchControlled ? !m.poweredNow : spec.on === false) continue;
+          // run it (the switch always takes over, exactly as before). The
+          // running state drives the hum via fan_on/fan_off events, so a fan
+          // woken mid-run by its switch hums from that moment.
+          const running = m.switchControlled ? !!m.poweredNow : spec.on !== false;
+          if (running !== !!m.fanWas) {
+            m.fanWas = running;
+            state.events.push({ type: running ? 'fan_on' : 'fan_off', x: fanBody.position.x, y: fanBody.position.y });
+          }
+          if (!running) continue;
           const dv = dirVector(m.dir);
           const fx = fanBody.position.x, fy = fanBody.position.y;
           const cx = fx + dv.x * (28 + FAN_REACH / 2);

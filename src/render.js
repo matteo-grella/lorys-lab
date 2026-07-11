@@ -1169,6 +1169,8 @@
         case 'switch_off': fx.ring(e.x, e.y, C.inkSoft); break;
         case 'water_on': fx.ring(e.x, e.y, C.sky); break;
         case 'water_off': fx.poof(e.x, e.y - 20, 3); break;
+        // fan_on/fan_off: audio-only (hum loop) — the spinning blades and
+        // wind-zone dashes ARE the visual, no extra FX needed
         case 'thwack':
           fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 5); fx.poof(e.x, e.y + 10, 4);
           if (e.bodyId != null) squash.set(e.bodyId, { t: 0, nx: 0, ny: 1, amt: 0.3 });

@@ -589,6 +589,8 @@
         case 'extinguish': sfx('extinguishHiss'); break;
         case 'water_on': startLoop('water'); break;
         case 'water_off': stopLoop('water'); break;
+        case 'fan_on': startLoop('fan'); break;
+        case 'fan_off': stopLoop('fan'); break;
       }
     }
   }
