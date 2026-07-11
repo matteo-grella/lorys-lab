@@ -222,8 +222,78 @@ Recipe for a new one-shot:
 
 ---
 
-## 5. UI & editor integration rules
+## 5. Look & feel — Lory, the toy-box style, and editor UX
 
+The deep normative spec is [`design/visual-spec.md`](../design/visual-spec.md)
+(full 16-color palette with contrast guarantees, per-part drawing recipes,
+Lory's construction in ~40 canvas statements). This section is what you must
+internalize before drawing anything.
+
+### 5.1 Lory the lorikeet (the bird)
+
+Lory is 100% code — `drawLory(ctx, pose, t, opts)` in render.js paints her
+into a 100×100 box, facing right, layer by layer: three swaying tail
+feathers (leaf/sunny/sky rounded rects), a `leaf` body ellipse clipped with
+a `tangerine` chest and `poppy` bib, a pose-driven wing, `tangerine` feet,
+a `loryBlue` head circle with a `blossom` cheek, a `poppy` teardrop beak
+with a `paper` glint, a white eye whose `ink` pupil looks toward the beak —
+and her signature charm: **aviator goggles pushed up on her forehead**
+(`woodDark` rims, `sky` lenses). She's an inventor bird.
+
+**Poses are transforms of ONE recipe — never redraw new art.** Each pose is
+a body transform + wing rotation + pupil offset:
+- `idle` — gentle 2.4s bob, blink every ~3.2s
+- `think` — head tilts −8°, wing raised to the chin, pupils up-left
+- `cheer` — 12px hops at 6Hz, 1.08 vertical stretch, wing thrown up
+- `oops` — squashed 1.10×0.85 and dropped 8px, wing drooping
+
+A new pose = a new parameter set for those knobs (plus eye/wing tweaks),
+about ten lines. If you find yourself drawing new bird anatomy, stop.
+
+Where she appears: the corner mascot on the game screen (with the
+`drawBubble` speech bubble), the title screen, the win overlay, and even
+the PWA app icons — all the same function at different scales.
+
+**Lory IS the UX voice.** Hints, part explanations (?), warnings, failure
+("oops" pose + an encouraging line) and success (cheer) all speak through
+her. Rules: failure/danger is communicated by her reaction, never by harsh
+visuals; anything narrative or instructional goes in her bubble via
+`setLory(pose, text, secs)`; terse status uses `toast()`. She speaks
+first-person, action-first, one idea per sentence, child-readable.
+
+### 5.2 The toy-box visual rules
+
+- **Zero binary assets**: all art is Canvas 2D paths + the 16 palette
+  tokens (`C.*` in render.js). No pure black or gray anywhere — `ink`
+  (#43342B, warm dark brown) is the darkest value.
+- **Palette semantics** (use meaning, not taste): `loryBlue` interactive /
+  primary · `leaf` go / success · `poppy` stop / danger / delete · `sunny`
+  reward & attention (stars, tray arrows) · `tangerine` warm accents &
+  toggles · `sky` glass / water / cool · woods for furniture · `paper`
+  surfaces. `sunny` and `sky` are fill-only, never text on cream.
+- **Toy rules** for every part: 2px `C.outline` outline, ground shadow,
+  corner radius ≥ 6px, no interior angle a child could read as "pointy",
+  ONE charm detail (a star bolt, a flower, a glint), ONE motion touch
+  (driven by the `anim` map or `o.t`), and a visibly distinct look per
+  physics state (§1.5).
+- **Juice is render-only**: squash & stretch, screen shake, ball trails,
+  dust, and the particle pool never touch physics — level proofs must be
+  unaffected by anything visual.
+
+### 5.3 UI/UX interaction style
+
+- **Two worlds**: the board + tray are canvas; screens, dialogs, and the
+  topbar are DOM styled by the toy-block CSS system in index.html —
+  `.chip` pill buttons, `.big` candy buttons, `.card` level tiles, all in
+  the `ui-rounded` font stack, bold, ≥ 44px touch targets.
+- **Physical buttons**: the signature style is a hard bottom-edge shadow
+  (`box-shadow: 0 5px 0 <darker>`); `:active` translates the button down
+  3px and removes the shadow — it visibly "presses". Reuse this on any new
+  control (the tray's ‹ › arrows draw the same idea on canvas).
+- **Kid-flow heuristics**: one primary action per screen; no confirmation
+  dialogs except destructive ones (delete uses the two-tap "✕ → Sure?"
+  pattern, no modal); everything reversible; errors always speak kid
+  language through Lory, never technical text.
 - **Dialogs** painted into `.overlay-root` MUST close via
   `showScreen(S.screen)` — it owns both the content and pointer-events. A
   bare `innerHTML='' + pointerEvents='none'` strands the screen (shipped

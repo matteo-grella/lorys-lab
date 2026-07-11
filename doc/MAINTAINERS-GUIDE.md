@@ -103,8 +103,10 @@ lorys-lab/
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   ├── puzzlecode.mjs       puzzle wire-format roundtrip + hostile-input proofs
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
-├── design/                  design-time documents (visual spec, audio spec,
-│                            level candidates) — not loaded by the game
+├── design/                  design-time documents — not loaded by the game,
+│                            but visual-spec.md and audio-spec.md are the
+│                            NORMATIVE style specs (palette, Lory's recipe,
+│                            per-part art rules, SFX recipes)
 ├── doc/MAINTAINERS-GUIDE.md this file (the WHAT: reference)
 ├── doc/OPERATING-MANUAL.md  the part-builder's cookbook (the HOW: method)
 └── doc/IOS-APP-GUIDE.md     iPhone/iPad packaging guide (PWA + Capacitor)
@@ -684,9 +686,13 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   star, ring, shard, wind, drop (water droplets), flamep (flame flickers). **All motion is scaled by `dt*60`** so speed is
   refresh-rate independent (there was a 120 Hz bug). Public triggers:
   `R.fx.confetti/poof/stars/ring/shards/windPuff`.
-- **Lory the mascot**: `drawLory(ctx, pose, t)` draws a 100×100 lorikeet;
-  poses: `idle` (blink + bob), `think`, `cheer`, `oops`. Also used on the
-  title screen and win overlay via separate small canvases.
+- **Lory the mascot**: `drawLory(ctx, pose, t)` draws a 100×100 lorikeet
+  (goggles on her forehead — she's an inventor) entirely from palette
+  paths; poses are TRANSFORMS of one recipe, never new art: `idle`
+  (2.4s bob + blink ~3.2s), `think` (head tilt −8°, wing to chin),
+  `cheer` (6Hz hops + stretch), `oops` (squash + droop). Also used on the
+  title screen, win overlay and the PWA icons via separate canvases.
+  Construction spec: design/visual-spec.md §2; UX role: manual §5.1.
 - **Speech bubble**: `drawBubble` — wraps text at ~230 px.
 - **Ghosts**: `drawGhost(ctx, spec, o, {style:'hint'})` = pulsing blue dashed
   outline + faded part (the hint system); drag ghosts use
