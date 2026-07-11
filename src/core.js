@@ -425,10 +425,15 @@
         if (d < bd) { bd = d; best = b; }
       }
       if (best) {
+        // stiff for hanging weights; soft for buoyant bodies — a rigid
+        // constraint would PUSH a balloon down like a rod, when a kid
+        // expects a balloon-on-a-string that floats up taut (same trick
+        // as the goal-balloon tether)
         const c = Constraint.create({
           pointA: { x: anchor.position.x, y: anchor.position.y + m.h / 2 },
           bodyB: best, pointB: { x: 0, y: 0 },
-          length: ROPE_LENGTH - m.h / 2, stiffness: 0.9, damping: 0.05,
+          length: ROPE_LENGTH - m.h / 2,
+          stiffness: lab(best).buoyant ? 0.01 : 0.9, damping: 0.05,
         });
         Composite.add(world, c);
         m.rope.attached = best;

@@ -93,7 +93,7 @@ lorys-lab/
 │                            path — the filename rotates when the artifact URL
 │                            has to be re-minted; check build.mjs for current)
 ├── test/
-│   ├── smoke.mjs            66 physics behaviour proofs (run in Node)
+│   ├── smoke.mjs            68 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   ├── puzzlecode.mjs       puzzle wire-format roundtrip + hostile-input proofs
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
@@ -130,7 +130,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 |---|---|---|
 | core | game | `createSim(levelDef, placements)` → sim object; `sim.step()` → events array; `sim.state` flags; `PART_DEFS`; `placementOverlaps(sim, spec)`; `simulate(levelDef, placements, opts)` (headless); `puzzleCode.{encode,decode,canonical}` (puzzle sharing, async) |
 | core | render | each Matter body carries `body.plugin.lab` metadata (`type,id,w,h,r,dir,spec,...`); event objects for FX |
-| core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off, laser` |
+| core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off, laser, bulb_on/off, fan_on/off` |
 | render | game | `R.draw(frame)` returns `{selButtons, wells}` hit-regions the input code uses next frame |
 | levels | game/tests | array of level objects (schema in §5) |
 
@@ -207,7 +207,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `bucket` | 120×90 | ✓ | ✓ | – | – | compound: solid open-top catcher |
 | `ball_beach` | r 28 | dynamic | ✓ | – | – | light + bouncy |
 | `ball_marble` | r 18 | dynamic | ✓ | – | – | heavy; the only magnet-attractable body |
-| `rope` | 28×18 anchor | ✓ | ✓ (sandbox) | – | – | tether hangs 150px below; grabs nearest dynamic body within 70px of its end at sim start; cut by scissors/flame |
+| `rope` | 28×18 anchor | ✓ | ✓ (sandbox) | – | – | tether hangs 150px below; grabs nearest dynamic body within 70px of its end at sim start; constraint is stiff (0.9) for weights but SOFT (0.01) for buoyant bodies, so a tied balloon floats up on a taut string instead of being rod-pushed down; cut by scissors, any flame, and the laser/lens beam |
 | `scissors` | 74×40 | ✓ | ✓ (sandbox) | ✓ | – | TRIGGERED: any touch snaps the blades once (12-frame cutting window, 45-frame re-arm; events `snipclick`/`snip`); during the window they cut any rope or goal-balloon tether crossing their OBB (flames burn both too); a cut balloon floats free |
 | `candle` | 26×58 | ✓ | ✓ (sandbox) | – | – | lit by default, `spec.lit:false` places it cold (editor 🔥/💨 toggle on the selected candle); flame tip ignites fuses/matches/cold candles, pops balloons, burns ropes and balloon strings; doused by water; relightable by any flame or laser |
 | `fuse` | 130×12 | ✓ sensor | ✓ (sandbox) | ✓ | – | bodies pass through; burns as interval [a,b] from ignition point both ways in ~2.5s (`FUSE_BURN_FRAMES 150`); fronts are flame points |
@@ -547,7 +547,7 @@ new total) before you build.
 Run everything from the project root:
 
 ```bash
-node test/smoke.mjs      # 66 physics behaviour proofs — every part & interaction
+node test/smoke.mjs      # 68 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
 node test/puzzlecode.mjs # puzzle wire-format roundtrip + hostile-input proofs
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext
@@ -555,7 +555,7 @@ node --check src/*.js    # syntax gate for every module
 node build.mjs           # regenerates dist/ (see §10)
 ```
 
-**Definition of green**: smoke N/N (currently 66/66), verify N/N (currently 24/24),
+**Definition of green**: smoke N/N (currently 68/68), verify N/N (currently 24/24),
 puzzlecode N/N (currently 35/35), audio-shape passes, all `--check`s pass.
 
 ### Browser E2E (Playwright, or bare headless Chrome)
@@ -618,7 +618,8 @@ Four traps, all hit in production here:
    non-game screens.
 
 `game.js` exposes **`window.__loryDebug.state`** (read-only snapshot:
-`{screen, phase, selection, placements, tray, hints, cam, viewW, ox}`)
+`{screen, phase, selection, placements, tray, hints, trayPage, trayPages,
+wellsVisible, cam, viewW, ox}`)
 precisely so E2E scripts can assert editor state. Keep it working.
 
 The canonical E2E checks: play L1 with its solution and reach the win overlay;

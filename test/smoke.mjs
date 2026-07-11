@@ -727,6 +727,33 @@ function run(level, placements, seconds = 12, watch = null) {
   check('a default fan hums from the first frame', plain.events.some(e => e.type === 'fan_on'));
 }
 
+// 38. A rope grabs buoyant bodies too — and behaves like a STRING, not a
+//     rod: the tied balloon floats up and is held taut above the anchor
+//     (a stiff constraint used to push it down like a stick).
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [
+      { type: 'rope', x: 400, y: 370 },       // end hangs at (400, 520)
+      { type: 'balloon', x: 405, y: 515 },
+      { type: 'bell', x: 1200, y: 100 },
+    ],
+  };
+  const sim = Core.createSim(level, []);
+  const balloon = sim.parts.find(p => p.spec.type === 'balloon').bodies[0];
+  for (let f = 0; f < 700; f++) sim.step();
+  check('tied balloon floats up on a taut string (no rod-push-down)',
+    balloon.position.y < 300 && balloon.position.y > 180, 'y=' + Math.round(balloon.position.y));
+  // and a heavy berry still hangs at full rope length (stiff for weights)
+  const sim2 = Core.createSim({ goalType: 'bell', fixed: [
+    { type: 'rope', x: 400, y: 370 }, { type: 'berry', x: 405, y: 515 }, { type: 'bell', x: 1200, y: 100 },
+  ] }, []);
+  const berry = sim2.parts.find(p => p.spec.type === 'berry').bodies[0];
+  for (let f = 0; f < 400; f++) sim2.step();
+  check('heavy loads still hang firm at rope length',
+    berry.position.y > 500 && berry.position.y < 540, 'y=' + Math.round(berry.position.y));
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);
