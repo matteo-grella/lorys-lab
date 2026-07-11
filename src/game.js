@@ -70,6 +70,7 @@
     runAcc: 0, lastTs: 0, t: 0,
     selection: null,          // index into placements
     selButtons: [], wells: [],
+    trayPage: 0, trayPages: 1, trayArrows: [],
     drag: null,               // {spec, from:'tray'|'board', origIndex, origSpec, invalid}
     hints: null, hintTimer: 0, hintsUsed: 0,
     failCount: 0, winTimer: null,
@@ -141,6 +142,7 @@
     S.trayStock = S.sandbox
       ? SANDBOX_TRAY.map(([type, count]) => ({ type, count }))
       : L.tray.map(t => ({ type: t.type, count: t.count }));
+    S.trayPage = 0;
     rebuildSim();
     R.resetFx();
     setLory('think', L.goalText, 6);
@@ -1146,6 +1148,14 @@
     }
     // tray wells (tray is outside the camera: canvas coords)
     if (pt.y > R.BOARD_H - 6) {
+      // ‹ › page buttons first — they sit at the tray's ends
+      for (const ar of S.trayArrows || []) {
+        if (Math.hypot(pt.x - ar.x, pt.y - ar.y) <= ar.r) {
+          S.trayPage = Math.max(0, Math.min(S.trayPages - 1, S.trayPage + (ar.id === 'next' ? 1 : -1)));
+          A.sfx('button');
+          return;
+        }
+      }
       for (const w of S.wells || []) {
         if (Math.abs(pt.x - w.x) < w.w / 2 && w.count > 0) {
           const defs = Core.PART_DEFS[w.type];
@@ -1342,12 +1352,16 @@
       dragGhost: S.drag ? Object.assign({ invalid: S.drag.invalid }, S.drag.spec) : null,
       hints: S.hints,
       tray: S.trayStock,
+      trayPage: S.trayPage,
       lory: S.lory,
       uiBoost,
       cam,
     });
     S.selButtons = out.selButtons || [];
     S.wells = out.wells || [];
+    S.trayArrows = out.trayArrows || [];
+    S.trayPages = out.trayPages || 1;
+    S.trayPage = out.trayPage || 0; // render clamps when the layout changes
   }
 
   // ---------------------------------------------------------------------------
@@ -1400,6 +1414,7 @@
     cv.addEventListener('pointermove', onPointerMove);
     cv.addEventListener('pointerup', onPointerUp);
     cv.addEventListener('pointercancel', onPointerUp);
+    let wheelTrayAcc = 0;
     cv.addEventListener('wheel', (e) => {
       if (S.screen !== 'game') return;
       // trackpad pinch / ctrl+scroll = camera zoom around the cursor
@@ -1412,6 +1427,16 @@
         cam.x = pt.x - boardOX() - b.x * cam.z;
         cam.y = pt.y - b.y * cam.z;
         clampCam();
+        return;
+      }
+      // wheel over the tray flips its pages (desktop nicety; ‹ › do the rest)
+      if (S.trayPages > 1 && canvasPos(e).y > R.BOARD_H - 6) {
+        e.preventDefault();
+        wheelTrayAcc += (e.deltaY || e.deltaX);
+        if (Math.abs(wheelTrayAcc) > 40) {
+          S.trayPage = Math.max(0, Math.min(S.trayPages - 1, S.trayPage + (wheelTrayAcc > 0 ? 1 : -1)));
+          wheelTrayAcc = 0;
+        }
         return;
       }
       // plain wheel over a selected part rotates it
@@ -1440,7 +1465,7 @@
 
   // tiny read-only debug handle (used by automated tests)
   window.__loryDebug = {
-    get state() { return { screen: S.screen, phase: S.phase, selection: S.selection, placements: S.placements.map(p => Object.assign({}, p)), tray: S.trayStock.map(t => Object.assign({}, t)), hints: S.hints ? S.hints.length : 0, cam: Object.assign({}, cam), viewW, ox: boardOX() }; },
+    get state() { return { screen: S.screen, phase: S.phase, selection: S.selection, placements: S.placements.map(p => Object.assign({}, p)), tray: S.trayStock.map(t => Object.assign({}, t)), hints: S.hints ? S.hints.length : 0, trayPage: S.trayPage, trayPages: S.trayPages, wellsVisible: (S.wells || []).length, cam: Object.assign({}, cam), viewW, ox: boardOX() }; },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

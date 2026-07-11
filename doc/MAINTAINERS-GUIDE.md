@@ -694,10 +694,13 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   spacing. `boost` is the mobile touch-target compensation (see game.js
   `uiBoost`, 1 on desktop/iPad, up to 1.7 on phones) — all sizes and the
   returned hit radii scale by it.
-- **Tray**: `drawTray(c, tray, o, dragType, boost)` computes adaptive well
-  sizes (`wellW = min(88*boost, (viewW-30)/n)` — the 31-well sandbox is width-bound
-  on desktop and gains room on full-bleed phones) and returns well hit-regions
-  `{type, x, y, w, count}`.
+- **Tray**: `drawTray(c, tray, o, dragType, boost, page)` sizes wells at up
+  to `88*boost`; if the full set would squeeze below `MIN_WELL` (64px·boost),
+  it PAGINATES: comfortable wells + big ‹ › buttons at the tray ends + page
+  dots. Returns `{wells, arrows, pages, page}` (page clamped for the current
+  layout); game.js owns `S.trayPage` (reset on `enterLevel`, arrows hit-tested
+  before wells on pointerdown, mouse wheel over the tray also flips pages).
+  Campaign trays are small enough that nothing changes for them.
 - **`draw(frame)`** is the single entry point; frame =
   `{sim, running, t, dt, selection, dragGhost, hints, tray, lory, uiBoost, cam}`;
   returns `{selButtons, wells}` for input hit-testing.

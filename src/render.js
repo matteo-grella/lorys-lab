@@ -1566,9 +1566,10 @@
     return btns;
   }
 
-  // tray. boost enlarges wells on small screens where the level's tray is
-  // small enough to still fit (the 31-well sandbox stays width-bound).
-  function drawTray(c, tray, o, dragType, boost) {
+  // tray. boost enlarges wells on small screens. When the full set would
+  // squeeze wells below a comfortable width (the 31-well sandbox!), the tray
+  // paginates: big ‹ › buttons flip between pages of comfortable wells.
+  function drawTray(c, tray, o, dragType, boost, pageIn) {
     const B = boost || 1;
     const y0 = BOARD_H;
     c.save();
@@ -1577,13 +1578,49 @@
     c.strokeStyle = C.woodDark; c.lineWidth = 2;
     c.beginPath(); c.moveTo(0, y0 + 1); c.lineTo(viewW, y0 + 1); c.stroke();
     const wells = [];
+    const arrows = [];
     const n = tray.length;
-    const wellW = Math.min(88 * B, (viewW - 30) / Math.max(n, 1));
+    const MIN_WELL = 64 * Math.min(B, 1.3); // narrower than this is finger-hostile
+    let view = tray, wellW, pages = 1, page = 0;
+    if (n * MIN_WELL <= viewW - 30) {
+      wellW = Math.min(88 * B, (viewW - 30) / Math.max(n, 1));
+    } else {
+      const aw = 52 * B;                    // space reserved per ‹ › button
+      const avail = viewW - 30 - 2 * aw;
+      const perPage = Math.max(3, Math.floor(avail / (80 * B)));
+      pages = Math.ceil(n / perPage);
+      page = Math.max(0, Math.min(pageIn || 0, pages - 1));
+      view = tray.slice(page * perPage, (page + 1) * perPage);
+      wellW = Math.min(88 * B, avail / perPage);
+      const cy = y0 + TRAY_H / 2 + 4;
+      for (const [id, ax, glyph, on] of [
+        ['prev', 15 + aw / 2, '‹', page > 0],
+        ['next', viewW - 15 - aw / 2, '›', page < pages - 1],
+      ]) {
+        c.save();
+        c.globalAlpha = on ? 1 : 0.25;
+        c.fillStyle = C.sunny; circle(c, ax, cy + 3 * B, 22 * B); c.fill();
+        c.fillStyle = '#C99A20';
+        c.beginPath(); c.arc(ax, cy + 3 * B, 22 * B, 0.15 * Math.PI, 0.85 * Math.PI); c.fill();
+        c.fillStyle = C.sunny; circle(c, ax, cy, 21 * B); c.fill();
+        c.fillStyle = C.ink; c.font = `800 ${Math.round(26 * B)}px ui-rounded, system-ui, sans-serif`;
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(glyph, ax, cy - 2);
+        c.restore();
+        if (on) arrows.push({ id, x: ax, y: cy, r: 28 * B });
+      }
+      // page dots so kids know there's more
+      const dotY = y0 + 10;
+      for (let i = 0; i < pages; i++) {
+        c.fillStyle = i === page ? C.woodDark : 'rgba(67,52,43,0.25)';
+        circle(c, viewW / 2 + (i - (pages - 1) / 2) * 14, dotY, i === page ? 4 : 3); c.fill();
+      }
+    }
     const box = Math.min(68 * Math.min(B, 1.45), wellW - 6, TRAY_H - 8);
-    const total = n * wellW;
+    const total = view.length * wellW;
     let x = viewW / 2 - total / 2;
     c.font = '700 12px ui-rounded, system-ui, sans-serif';
-    for (const item of tray) {
+    for (const item of view) {
       const cx = x + wellW / 2, cy = y0 + TRAY_H / 2 + 4;
       c.fillStyle = C.paper; rr(c, cx - box / 2, cy - box / 2, box, box, 14); c.fill();
       c.fillStyle = 'rgba(67,52,43,0.06)'; rr(c, cx - box / 2, cy - box / 2, box, 8, 6); c.fill();
@@ -1608,7 +1645,7 @@
       x += wellW;
     }
     c.restore();
-    return wells;
+    return { wells, arrows, pages, page };
   }
 
   // speech bubble
@@ -1699,9 +1736,13 @@
 
     // tray
     let wells = null;
-    if (tray) wells = drawTray(ctx, tray, o, dragGhost && dragGhost.type, frame.uiBoost);
+    let trayOut = null;
+    if (tray) {
+      trayOut = drawTray(ctx, tray, o, dragGhost && dragGhost.type, frame.uiBoost, frame.trayPage);
+      wells = trayOut.wells;
+    }
 
-    return { selButtons, wells };
+    return { selButtons, wells, trayArrows: trayOut ? trayOut.arrows : [], trayPages: trayOut ? trayOut.pages : 1, trayPage: trayOut ? trayOut.page : 0 };
   }
 
   function init(canvas) {
