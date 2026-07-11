@@ -32,6 +32,7 @@ const GOOD = {
   plucked: [
     { type: 'plank', x: 400, y: 500, angle: 15 },     // rotated part
     { type: 'laser', x: 800, y: 500, angle: 90 },
+    { type: 'fan', x: 250, y: 470, dir: 'left', on: false }, // TWO extras: dir + off
   ],
 };
 
@@ -42,7 +43,10 @@ const GOOD = {
   check('code is URL-safe', /^LORY\d+\.[A-Za-z0-9\-_]+$/.test(code), `${code.length} chars`);
   const back = await PC.decode(code);
   check('name/by survive', back.name === GOOD.name && back.by === 'L.');
-  check('part counts survive', back.fixed.length === 6 && back.plucked.length === 2);
+  check('part counts survive', back.fixed.length === 6 && back.plucked.length === 3);
+  const offFan = back.plucked.find(s => s.type === 'fan');
+  check('two extras survive (stopped fan keeps dir AND on:false)',
+    offFan.dir === 'left' && offFan.on === false);
   const cold = back.fixed.find(s => s.type === 'candle');
   const fan = back.fixed.find(s => s.type === 'fan');
   const hyd = back.fixed.find(s => s.type === 'hydrant');
@@ -97,6 +101,9 @@ await rejects('corrupt deflate stream', 'LORY1.AAAAAAAA', 'bad-format');
   await rejects('angle on a non-rot part', await mk(Object.assign({}, base, { plucked: [['bumper', 400, 500, 45]] })), 'bad-data');
   await rejects('bogus dir', await mk(Object.assign({}, base, { fixed: [['berry', 100, 100], ['bowl', 900, 655], ['fan', 200, 470, 'down']] })), 'bad-data');
   await rejects('lit=true as extra (must be omitted)', await mk(Object.assign({}, base, { fixed: [['berry', 100, 100], ['bowl', 900, 655], ['candle', 500, 661, true]] })), 'bad-data');
+  await rejects('duplicate extras of one kind', await mk(Object.assign({}, base, { plucked: [['plank', 400, 500, 15, 30]] })), 'bad-data');
+  await rejects('false on a part that cannot start off', await mk(Object.assign({}, base, { plucked: [['plank', 400, 500, false]] })), 'bad-data');
+  await rejects('three extras', await mk(Object.assign({}, base, { fixed: [['berry', 100, 100], ['bowl', 900, 655], ['fan', 200, 470, 'left', false, 5]] })), 'bad-data');
   await rejects('empty plucked (not a puzzle)', await mk(Object.assign({}, base, { plucked: [] })), 'bad-data');
   await rejects('missing berry', await mk({ v: 1, name: 'x', fixed: [['bowl', 900, 655]], plucked: [['plank', 400, 500]] }), 'bad-data');
   await rejects('missing bowl', await mk({ v: 1, name: 'x', fixed: [['berry', 100, 100]], plucked: [['plank', 400, 500]] }), 'bad-data');

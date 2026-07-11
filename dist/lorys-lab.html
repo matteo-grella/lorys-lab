@@ -977,7 +977,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         if (spec.type === 'fan') {
           const fanBody = p.bodies[0];
           const m = lab(fanBody);
-          if (m.switchControlled && !m.poweredNow) continue;
+          // spec.on === false places the fan stopped: only a wired switch can
+          // run it (the switch always takes over, exactly as before)
+          if (m.switchControlled ? !m.poweredNow : spec.on === false) continue;
           const dv = dirVector(m.dir);
           const fx = fanBody.position.x, fy = fanBody.position.y;
           const cx = fx + dv.x * (28 + FAN_REACH / 2);
@@ -1468,11 +1470,12 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   // Puzzle wire format — share links, .lorypuzzle files, the community shelf.
   // `LORY1.<base64url(deflate-raw(json))>`, or `LORY0.<base64url(json)>` when
   // CompressionStream is unavailable. The json payload:
-  //   { v:1, name, by?, fixed:[[type,x,y,extra?],...], plucked:[[...],...] }
-  // `extra` is at most ONE of: number = angle (rot parts), string = dir
-  // (dir parts, default omitted), false = a cold candle. Decoding trusts
-  // NOTHING: every field is validated and copied into fresh objects, so no
-  // foreign key (e.g. __proto__) ever reaches game state.
+  //   { v:1, name, by?, fixed:[[type,x,y,...extras],...], plucked:[[...],...] }
+  // Up to TWO extras, at most one of each kind: number = angle (rot parts),
+  // string = dir (dir parts, default omitted), false = starts off (cold
+  // candle, stopped fan). Decoding trusts NOTHING: every field is validated
+  // and copied into fresh objects, so no foreign key (e.g. __proto__) ever
+  // reaches game state.
   // ---------------------------------------------------------------------------
   const PUZZLE_FORMAT_V = 1;
   const PUZZLE_MAX_PARTS = 100;   // perf guard: no puzzle needs more
@@ -1526,7 +1529,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   }
 
   // Validate one part's fields; returns a FRESH spec object or throws.
-  function puzzleCheckPart(type, x, y, extra) {
+  function puzzleCheckPart(type, x, y, extras) {
     if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(PART_DEFS, type))
       throw new Error('newer-version'); // unknown part: likely a newer game
     const def = PART_DEFS[type];
@@ -1534,30 +1537,38 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     x = Math.round(x); y = Math.round(y);
     if (x < 0 || x > WORLD.w || y < 0 || y > WORLD.h) throw new Error('bad-data');
     const spec = { type, x, y };
-    if (extra !== undefined) {
-      if (typeof extra === 'number' && def.rot && Number.isFinite(extra)) {
+    for (const extra of extras) {
+      if (typeof extra === 'number' && def.rot && Number.isFinite(extra) && spec.angle === undefined) {
         spec.angle = ((Math.round(extra) % 360) + 360) % 360;
-      } else if (typeof extra === 'string' && def.dir && def.dir.indexOf(extra) >= 0) {
+      } else if (typeof extra === 'string' && def.dir && def.dir.indexOf(extra) >= 0 && spec.dir === undefined) {
         spec.dir = extra;
-      } else if (extra === false && type === 'candle') {
+      } else if (extra === false && type === 'candle' && spec.lit === undefined) {
         spec.lit = false;
+      } else if (extra === false && type === 'fan' && spec.on === undefined) {
+        spec.on = false;
       } else throw new Error('bad-data');
     }
     return spec;
   }
 
-  // The single optional `extra` slot of a local spec (encode side; junk fields
-  // on non-applicable parts are silently dropped — local data is trusted-ish).
-  function puzzleExtra(spec) {
+  // The optional extras of a local spec (encode side; junk fields on
+  // non-applicable parts are silently dropped — local data is trusted-ish).
+  // At most one of each kind: dir string (non-default), angle number, and
+  // `false` for parts that can start switched off (cold candle, stopped fan).
+  function puzzleExtras(spec) {
     const def = PART_DEFS[spec.type];
-    if (spec.type === 'candle' && spec.lit === false) return false;
-    if (def && def.dir && spec.dir != null && spec.dir !== def.dir[0]) return spec.dir;
-    if (def && def.rot && spec.angle) return ((Math.round(spec.angle) % 360) + 360) % 360 || undefined;
-    return undefined;
+    const out = [];
+    if (def && def.dir && spec.dir != null && spec.dir !== def.dir[0]) out.push(spec.dir);
+    if (def && def.rot && spec.angle) {
+      const a = ((Math.round(spec.angle) % 360) + 360) % 360;
+      if (a) out.push(a);
+    }
+    if ((spec.type === 'candle' && spec.lit === false)
+      || (spec.type === 'fan' && spec.on === false)) out.push(false);
+    return out;
   }
   function puzzleTuple(spec) {
-    const extra = puzzleExtra(spec);
-    return extra === undefined ? [spec.type, spec.x, spec.y] : [spec.type, spec.x, spec.y, extra];
+    return [spec.type, spec.x, spec.y].concat(puzzleExtras(spec));
   }
 
   const stripText = (s, max) => typeof s === 'string'
@@ -1574,10 +1585,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       if (!Array.isArray(arr)) throw new Error('bad-data');
       for (const s of arr) {
         if (Array.isArray(s)) {
-          if (s.length < 3 || s.length > 4) throw new Error('bad-data');
-          rows[key].push(puzzleCheckPart(s[0], s[1], s[2], s.length > 3 ? s[3] : undefined));
+          if (s.length < 3 || s.length > 5) throw new Error('bad-data');
+          rows[key].push(puzzleCheckPart(s[0], s[1], s[2], s.slice(3)));
         } else if (s && typeof s === 'object') {
-          rows[key].push(puzzleCheckPart(s.type, s.x, s.y, puzzleExtra(s)));
+          rows[key].push(puzzleCheckPart(s.type, s.x, s.y, puzzleExtras(s)));
         } else throw new Error('bad-data');
       }
     }
@@ -5298,7 +5309,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       const a = partAnim(id);
       const type = p.spec.type;
       if (type === 'fan') {
-        const off = p.bodies[0].plugin.lab.switchControlled && !p.bodies[0].plugin.lab.poweredNow;
+        const m = p.bodies[0].plugin.lab;
+        const off = m.switchControlled ? !m.poweredNow : p.spec.on === false;
         a.spin += ((running && !off) ? 9.4 : 0.9) * dt * TAU / 2;
       }
       if (type === 'conveyor') a.dash += (running ? 3.2 : 0) * 60 * dt;
@@ -5492,7 +5504,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     for (const p of sim.parts) {
       if (p.spec.type !== 'fan') continue;
       const b = p.bodies[0], m = b.plugin.lab;
-      const off = m.switchControlled && !m.poweredNow; // wired but unpowered
+      const off = m.switchControlled ? !m.poweredNow : p.spec.on === false; // wired-unpowered or placed stopped
       const dv = m.dir === 'left' ? { x: -1, y: 0 } : m.dir === 'up' ? { x: 0, y: -1 } : { x: 1, y: 0 };
       c.save();
       c.globalAlpha = faint || off ? 0.18 : 0.55;
@@ -5572,8 +5584,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     const defsBtns = [];
     if (defs.rot) defsBtns.push({ id: 'rotl', icon: '⟲', col: C.loryBlue }, { id: 'rotr', icon: '⟳', col: C.loryBlue });
     if (defs.dir) defsBtns.push({ id: 'flip', icon: '⇄', col: C.tangerine });
-    // candles start lit or cold — the button icon shows what tapping DOES
+    // candles start lit or cold, fans start running or stopped — the button
+    // icon shows what tapping DOES
     if (sel.type === 'candle') defsBtns.push({ id: 'lit', icon: sel.lit === false ? '🔥' : '💨', col: C.tangerine });
+    if (sel.type === 'fan') defsBtns.push({ id: 'lit', icon: sel.on === false ? '▶' : '⏸', col: C.tangerine });
     // sandbox puzzle marks: 🧩 sends the part to the player's tray, 📌 pins it
     // back into the scene (the escape hatch for editing a saved puzzle).
     // Sparkles are author-only scenery — never tray pieces.
@@ -6371,7 +6385,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     wall: 'A tall wall. Nothing gets through!',
     trampoline: 'Boing! Whatever falls on it bounces way up.',
     seesaw: 'A seesaw! Drop something on one side to fling what sits on the other.',
-    fan: 'It blows a steady wind! Light things fly away — but never my berry.',
+    fan: 'It blows a steady wind! Light things fly away — but never my berry. Tap ⏸ to place it stopped: then only a pressure plate wakes it.',
     magnet: 'Bump it awake and it pulls metal marbles. Only marbles!',
     domino: 'Line up dominoes and tip the first one — click, clack, click!',
     conveyor: 'A moving belt! It carries things along — flip it with ⇄.',
@@ -6407,10 +6421,16 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
   function toggleLitSelection() {
     const p = S.placements[S.selection];
-    if (!p || p.type !== 'candle') return;
-    p.lit = p.lit === false;        // cold -> lit, lit (default) -> cold
-    rebuildSim();
-    A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
+    if (!p) return;
+    if (p.type === 'candle') {
+      p.lit = p.lit === false;      // cold -> lit, lit (default) -> cold
+      rebuildSim();
+      A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
+    } else if (p.type === 'fan') {
+      p.on = p.on === false;        // stopped -> running, running (default) -> stopped
+      rebuildSim();
+      A.sfx(p.on === false ? 'switchOff' : 'switchOn');
+    }
   }
   function togglePluckSelection() {
     // sandbox: mark/unmark the selected part as a puzzle tray piece without
@@ -6727,10 +6747,12 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   }
 
   function startLoops() {
-    for (const p of S.placements.concat(currentLevel().fixed || [])) {
-      if (p.type === 'fan') A.startLoop('fan');
-      if (p.type === 'conveyor') A.startLoop('conveyor');
-      // hydrant water is event-driven now (water_on/water_off)
+    for (const p of S.sim.parts) {
+      const m = p.bodies[0].plugin.lab;
+      // a fan that starts silent (placed stopped, or waiting on its wired
+      // switch) doesn't hum; hydrant water is event-driven (water_on/off)
+      if (p.spec.type === 'fan' && (m.switchControlled ? m.poweredNow : p.spec.on !== false)) A.startLoop('fan');
+      if (p.spec.type === 'conveyor') A.startLoop('conveyor');
     }
   }
 

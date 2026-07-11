@@ -93,7 +93,7 @@ lorys-lab/
 │                            path — the filename rotates when the artifact URL
 │                            has to be re-minted; check build.mjs for current)
 ├── test/
-│   ├── smoke.mjs            61 physics behaviour proofs (run in Node)
+│   ├── smoke.mjs            63 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   ├── puzzlecode.mjs       puzzle wire-format roundtrip + hostile-input proofs
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
@@ -198,7 +198,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `plank` | 160×20 | ✓ | ✓ | ✓ | – | the only rotatable part in campaign trays (the sandbox adds rotatable scissors/fuse/fist/match/laser) |
 | `trampoline` | 110×24 | ✓ | ✓ | – | – | horizontal only |
 | `seesaw` | 220×16 | dynamic | ✓ | – | – | plank + pivot constraint (see below) |
-| `fan` | 56×56 | ✓ | ✓ | – | right/left/up | wind field, see 4.2 |
+| `fan` | 56×56 | ✓ | ✓ | – | right/left/up | wind field, see 4.2. `spec.on:false` places it stopped (editor ⏸/▶ toggle): only a wired switch runs it then; a wired switch always takes over either way |
 | `magnet` | 56×56 | ✓ | ✓ | – | – | sleepy magnet, see 4.2 |
 | `domino` | 16×56 | dynamic | ✓ | – | – | chain element |
 | `conveyor` | 140×26 | ✓ | ✓ | – | right/left | surface drive, see 4.2 |
@@ -545,7 +545,7 @@ new total) before you build.
 Run everything from the project root:
 
 ```bash
-node test/smoke.mjs      # 61 physics behaviour proofs — every part & interaction
+node test/smoke.mjs      # 63 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
 node test/puzzlecode.mjs # puzzle wire-format roundtrip + hostile-input proofs
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext
@@ -553,8 +553,8 @@ node --check src/*.js    # syntax gate for every module
 node build.mjs           # regenerates dist/ (see §10)
 ```
 
-**Definition of green**: smoke N/N (currently 61/61), verify N/N (currently 24/24),
-puzzlecode N/N (currently 31/31), audio-shape passes, all `--check`s pass.
+**Definition of green**: smoke N/N (currently 63/63), verify N/N (currently 24/24),
+puzzlecode N/N (currently 35/35), audio-shape passes, all `--check`s pass.
 
 ### Browser E2E (Playwright, or bare headless Chrome)
 
@@ -685,7 +685,7 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   renders at 35% alpha with an orange dashed box + 🧩 badge.
 - **Selection UI**: `drawSelection(c, sel, o, boost, sandbox)` returns button
   hit-circles (`{id:'rotl'|'rotr'|'flip'|'lit'|'pluck'|'info'|'del', x, y, r:28*boost}`;
-  `lit` 🔥/💨 only on candles, `pluck` 🧩/📌 only in the sandbox — it toggles
+  `lit` 🔥/💨 on candles and ⏸/▶ on fans (initial state), `pluck` 🧩/📌 only in the sandbox — it toggles
   `spec._plucked` without entering pluck mode, THE way to revert a saved
   puzzle's hidden-part marks; `info` ? on EVERY part — Lory explains it from
   game.js `PART_INFO`). Buttons
@@ -879,9 +879,9 @@ silently. All shapes are defaulted on load — never assume fields exist.
   shows the custom "You fed Lory!" overlay (🧩 badge when starless).
 - **Puzzle sharing** (`core.js puzzleCode` + game.js): wire format
   `LORY1.<base64url(deflate-raw(json))>` (`LORY0.` = uncompressed fallback);
-  payload `{v, name, by?, fixed:[[type,x,y,extra?]…], plucked:[…]}` where
-  `extra` is ONE of number=angle / string=dir (default omitted) / false=cold
-  candle. `decode()` validates EVERYTHING into fresh objects (unknown part or
+  payload `{v, name, by?, fixed:[[type,x,y,…extras]…], plucked:[…]}` with up
+  to TWO extras, one per kind: number=angle / string=dir (default omitted) /
+  false=starts off (cold candle, stopped fan). `decode()` validates EVERYTHING into fresh objects (unknown part or
   future `v` → `newer-version`; bounds/caps/shape errors → `bad-data`;
   ≥1 berry+bowl and ≥1 plucked required; ≤100 parts; inflate capped —
   zip-bomb guard). Share paths: per-card 📤 dialog (native share / copy link

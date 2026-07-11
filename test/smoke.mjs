@@ -701,6 +701,28 @@ function run(level, placements, seconds = 12, watch = null) {
     on && wired.parts.find(p => p.spec.type === 'bulb').bodies[0].plugin.lab.bulb.on);
 }
 
+// 37. Fan initial state: spec.on === false places it stopped — only a wired
+//     pressure switch can run it (the switch always takes over, as before).
+{
+  const level = (fanSpec, extra) => ({
+    goalType: 'bell',
+    fixed: [
+      { type: 'shelf', x: 500, y: 500, w: 400, h: 24 },
+      { type: 'ball_beach', x: 420, y: 459 },
+      { type: 'bell', x: 700, y: 460 },
+      fanSpec,
+      ...(extra || []),
+    ],
+  });
+  const stopped = Core.simulate(level({ type: 'fan', x: 320, y: 460, dir: 'right', on: false }), [], { maxSeconds: 8 });
+  check('stopped fan never blows (ball stays, bell silent)', !stopped.won && stopped.settled);
+  const wired = Core.simulate(
+    level({ type: 'fan', x: 320, y: 460, dir: 'right', on: false },
+      [{ type: 'switch', x: 320, y: 680 }]),
+    [{ type: 'ball_marble', x: 320, y: 600 }], { maxSeconds: 8 });
+  check('weight on the plate wakes the stopped fan -> bell rings', wired.won, `t=${wired.seconds}s`);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

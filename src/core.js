@@ -740,7 +740,9 @@
         if (spec.type === 'fan') {
           const fanBody = p.bodies[0];
           const m = lab(fanBody);
-          if (m.switchControlled && !m.poweredNow) continue;
+          // spec.on === false places the fan stopped: only a wired switch can
+          // run it (the switch always takes over, exactly as before)
+          if (m.switchControlled ? !m.poweredNow : spec.on === false) continue;
           const dv = dirVector(m.dir);
           const fx = fanBody.position.x, fy = fanBody.position.y;
           const cx = fx + dv.x * (28 + FAN_REACH / 2);
@@ -1231,11 +1233,12 @@
   // Puzzle wire format — share links, .lorypuzzle files, the community shelf.
   // `LORY1.<base64url(deflate-raw(json))>`, or `LORY0.<base64url(json)>` when
   // CompressionStream is unavailable. The json payload:
-  //   { v:1, name, by?, fixed:[[type,x,y,extra?],...], plucked:[[...],...] }
-  // `extra` is at most ONE of: number = angle (rot parts), string = dir
-  // (dir parts, default omitted), false = a cold candle. Decoding trusts
-  // NOTHING: every field is validated and copied into fresh objects, so no
-  // foreign key (e.g. __proto__) ever reaches game state.
+  //   { v:1, name, by?, fixed:[[type,x,y,...extras],...], plucked:[[...],...] }
+  // Up to TWO extras, at most one of each kind: number = angle (rot parts),
+  // string = dir (dir parts, default omitted), false = starts off (cold
+  // candle, stopped fan). Decoding trusts NOTHING: every field is validated
+  // and copied into fresh objects, so no foreign key (e.g. __proto__) ever
+  // reaches game state.
   // ---------------------------------------------------------------------------
   const PUZZLE_FORMAT_V = 1;
   const PUZZLE_MAX_PARTS = 100;   // perf guard: no puzzle needs more
@@ -1289,7 +1292,7 @@
   }
 
   // Validate one part's fields; returns a FRESH spec object or throws.
-  function puzzleCheckPart(type, x, y, extra) {
+  function puzzleCheckPart(type, x, y, extras) {
     if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(PART_DEFS, type))
       throw new Error('newer-version'); // unknown part: likely a newer game
     const def = PART_DEFS[type];
@@ -1297,30 +1300,38 @@
     x = Math.round(x); y = Math.round(y);
     if (x < 0 || x > WORLD.w || y < 0 || y > WORLD.h) throw new Error('bad-data');
     const spec = { type, x, y };
-    if (extra !== undefined) {
-      if (typeof extra === 'number' && def.rot && Number.isFinite(extra)) {
+    for (const extra of extras) {
+      if (typeof extra === 'number' && def.rot && Number.isFinite(extra) && spec.angle === undefined) {
         spec.angle = ((Math.round(extra) % 360) + 360) % 360;
-      } else if (typeof extra === 'string' && def.dir && def.dir.indexOf(extra) >= 0) {
+      } else if (typeof extra === 'string' && def.dir && def.dir.indexOf(extra) >= 0 && spec.dir === undefined) {
         spec.dir = extra;
-      } else if (extra === false && type === 'candle') {
+      } else if (extra === false && type === 'candle' && spec.lit === undefined) {
         spec.lit = false;
+      } else if (extra === false && type === 'fan' && spec.on === undefined) {
+        spec.on = false;
       } else throw new Error('bad-data');
     }
     return spec;
   }
 
-  // The single optional `extra` slot of a local spec (encode side; junk fields
-  // on non-applicable parts are silently dropped — local data is trusted-ish).
-  function puzzleExtra(spec) {
+  // The optional extras of a local spec (encode side; junk fields on
+  // non-applicable parts are silently dropped — local data is trusted-ish).
+  // At most one of each kind: dir string (non-default), angle number, and
+  // `false` for parts that can start switched off (cold candle, stopped fan).
+  function puzzleExtras(spec) {
     const def = PART_DEFS[spec.type];
-    if (spec.type === 'candle' && spec.lit === false) return false;
-    if (def && def.dir && spec.dir != null && spec.dir !== def.dir[0]) return spec.dir;
-    if (def && def.rot && spec.angle) return ((Math.round(spec.angle) % 360) + 360) % 360 || undefined;
-    return undefined;
+    const out = [];
+    if (def && def.dir && spec.dir != null && spec.dir !== def.dir[0]) out.push(spec.dir);
+    if (def && def.rot && spec.angle) {
+      const a = ((Math.round(spec.angle) % 360) + 360) % 360;
+      if (a) out.push(a);
+    }
+    if ((spec.type === 'candle' && spec.lit === false)
+      || (spec.type === 'fan' && spec.on === false)) out.push(false);
+    return out;
   }
   function puzzleTuple(spec) {
-    const extra = puzzleExtra(spec);
-    return extra === undefined ? [spec.type, spec.x, spec.y] : [spec.type, spec.x, spec.y, extra];
+    return [spec.type, spec.x, spec.y].concat(puzzleExtras(spec));
   }
 
   const stripText = (s, max) => typeof s === 'string'
@@ -1337,10 +1348,10 @@
       if (!Array.isArray(arr)) throw new Error('bad-data');
       for (const s of arr) {
         if (Array.isArray(s)) {
-          if (s.length < 3 || s.length > 4) throw new Error('bad-data');
-          rows[key].push(puzzleCheckPart(s[0], s[1], s[2], s.length > 3 ? s[3] : undefined));
+          if (s.length < 3 || s.length > 5) throw new Error('bad-data');
+          rows[key].push(puzzleCheckPart(s[0], s[1], s[2], s.slice(3)));
         } else if (s && typeof s === 'object') {
-          rows[key].push(puzzleCheckPart(s.type, s.x, s.y, puzzleExtra(s)));
+          rows[key].push(puzzleCheckPart(s.type, s.x, s.y, puzzleExtras(s)));
         } else throw new Error('bad-data');
       }
     }

@@ -1261,7 +1261,8 @@
       const a = partAnim(id);
       const type = p.spec.type;
       if (type === 'fan') {
-        const off = p.bodies[0].plugin.lab.switchControlled && !p.bodies[0].plugin.lab.poweredNow;
+        const m = p.bodies[0].plugin.lab;
+        const off = m.switchControlled ? !m.poweredNow : p.spec.on === false;
         a.spin += ((running && !off) ? 9.4 : 0.9) * dt * TAU / 2;
       }
       if (type === 'conveyor') a.dash += (running ? 3.2 : 0) * 60 * dt;
@@ -1455,7 +1456,7 @@
     for (const p of sim.parts) {
       if (p.spec.type !== 'fan') continue;
       const b = p.bodies[0], m = b.plugin.lab;
-      const off = m.switchControlled && !m.poweredNow; // wired but unpowered
+      const off = m.switchControlled ? !m.poweredNow : p.spec.on === false; // wired-unpowered or placed stopped
       const dv = m.dir === 'left' ? { x: -1, y: 0 } : m.dir === 'up' ? { x: 0, y: -1 } : { x: 1, y: 0 };
       c.save();
       c.globalAlpha = faint || off ? 0.18 : 0.55;
@@ -1535,8 +1536,10 @@
     const defsBtns = [];
     if (defs.rot) defsBtns.push({ id: 'rotl', icon: '⟲', col: C.loryBlue }, { id: 'rotr', icon: '⟳', col: C.loryBlue });
     if (defs.dir) defsBtns.push({ id: 'flip', icon: '⇄', col: C.tangerine });
-    // candles start lit or cold — the button icon shows what tapping DOES
+    // candles start lit or cold, fans start running or stopped — the button
+    // icon shows what tapping DOES
     if (sel.type === 'candle') defsBtns.push({ id: 'lit', icon: sel.lit === false ? '🔥' : '💨', col: C.tangerine });
+    if (sel.type === 'fan') defsBtns.push({ id: 'lit', icon: sel.on === false ? '▶' : '⏸', col: C.tangerine });
     // sandbox puzzle marks: 🧩 sends the part to the player's tray, 📌 pins it
     // back into the scene (the escape hatch for editing a saved puzzle).
     // Sparkles are author-only scenery — never tray pieces.

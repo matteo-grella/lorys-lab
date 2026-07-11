@@ -554,7 +554,7 @@
     wall: 'A tall wall. Nothing gets through!',
     trampoline: 'Boing! Whatever falls on it bounces way up.',
     seesaw: 'A seesaw! Drop something on one side to fling what sits on the other.',
-    fan: 'It blows a steady wind! Light things fly away — but never my berry.',
+    fan: 'It blows a steady wind! Light things fly away — but never my berry. Tap ⏸ to place it stopped: then only a pressure plate wakes it.',
     magnet: 'Bump it awake and it pulls metal marbles. Only marbles!',
     domino: 'Line up dominoes and tip the first one — click, clack, click!',
     conveyor: 'A moving belt! It carries things along — flip it with ⇄.',
@@ -590,10 +590,16 @@
 
   function toggleLitSelection() {
     const p = S.placements[S.selection];
-    if (!p || p.type !== 'candle') return;
-    p.lit = p.lit === false;        // cold -> lit, lit (default) -> cold
-    rebuildSim();
-    A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
+    if (!p) return;
+    if (p.type === 'candle') {
+      p.lit = p.lit === false;      // cold -> lit, lit (default) -> cold
+      rebuildSim();
+      A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
+    } else if (p.type === 'fan') {
+      p.on = p.on === false;        // stopped -> running, running (default) -> stopped
+      rebuildSim();
+      A.sfx(p.on === false ? 'switchOff' : 'switchOn');
+    }
   }
   function togglePluckSelection() {
     // sandbox: mark/unmark the selected part as a puzzle tray piece without
@@ -910,10 +916,12 @@
   }
 
   function startLoops() {
-    for (const p of S.placements.concat(currentLevel().fixed || [])) {
-      if (p.type === 'fan') A.startLoop('fan');
-      if (p.type === 'conveyor') A.startLoop('conveyor');
-      // hydrant water is event-driven now (water_on/water_off)
+    for (const p of S.sim.parts) {
+      const m = p.bodies[0].plugin.lab;
+      // a fan that starts silent (placed stopped, or waiting on its wired
+      // switch) doesn't hum; hydrant water is event-driven (water_on/off)
+      if (p.spec.type === 'fan' && (m.switchControlled ? m.poweredNow : p.spec.on !== false)) A.startLoop('fan');
+      if (p.spec.type === 'conveyor') A.startLoop('conveyor');
     }
   }
 
