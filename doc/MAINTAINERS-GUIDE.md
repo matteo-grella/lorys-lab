@@ -6,6 +6,12 @@ game is built, why every number has the value it has, and — most importantly �
 **the safe procedures for changing things without breaking the 24 verified
 levels**. Read it fully before touching `src/`.
 
+**Companion document:** [OPERATING-MANUAL.md](OPERATING-MANUAL.md) — the
+part-builder's cookbook. This guide is the WHAT (reference); the manual is
+the HOW (design principles, the probe-driven method, experiment harnesses,
+sound design, the layer checklist, and the ship ritual). If you are about to
+BUILD something new, start there and come back here for the facts.
+
 ---
 
 ## Table of contents
@@ -99,7 +105,8 @@ lorys-lab/
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
 ├── design/                  design-time documents (visual spec, audio spec,
 │                            level candidates) — not loaded by the game
-├── doc/MAINTAINERS-GUIDE.md this file
+├── doc/MAINTAINERS-GUIDE.md this file (the WHAT: reference)
+├── doc/OPERATING-MANUAL.md  the part-builder's cookbook (the HOW: method)
 └── doc/IOS-APP-GUIDE.md     iPhone/iPad packaging guide (PWA + Capacitor)
 ```
 
