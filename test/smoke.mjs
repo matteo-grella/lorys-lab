@@ -644,6 +644,63 @@ function run(level, placements, seconds = 12, watch = null) {
     r.won && r.events.some(e => e.type === 'snip' && e.cause === 'fire'), `t=${r.seconds}s`);
 }
 
+// 35. Lightbulb button: a press on the chosen face toggles the light; a
+//     resting object presses once; a bouncing one toggles on and off again.
+{
+  const level = {
+    goalType: 'bell',
+    fixed: [{ type: 'bulb', x: 400, y: 660, dir: 'up' }, { type: 'bell', x: 1200, y: 100 }],
+  };
+  const once = Core.createSim(level, [{ type: 'ball_marble', x: 400, y: 560 }]);
+  const evs1 = [];
+  for (let f = 0; f < 600; f++) for (const e of once.step()) if (e.type.startsWith('bulb_')) evs1.push(e.type);
+  check('resting marble presses the button exactly once (light on)',
+    evs1.length === 1 && evs1[0] === 'bulb_on');
+  const bounce = Core.createSim(level, [{ type: 'ball_beach', x: 400, y: 560 }]);
+  const evs2 = [];
+  for (let f = 0; f < 600; f++) for (const e of bounce.step()) if (e.type.startsWith('bulb_')) evs2.push(e.type);
+  check('bouncing ball presses again — light toggles back off',
+    evs2[0] === 'bulb_on' && evs2[1] === 'bulb_off', evs2.join(','));
+  const side = Core.createSim(level, [{ type: 'ball_marble', x: 460, y: 560 }]); // lands beside, touches the flank
+  const evs3 = [];
+  for (let f = 0; f < 400; f++) for (const e of side.step()) if (e.type.startsWith('bulb_')) evs3.push(e.type);
+  check('touching a non-button face does nothing', evs3.length === 0, evs3.join(','));
+}
+
+// 36. Lens focuses a lit bulb's light into the laser beam; solids block the
+//     light path; a wired switch can drive the bulb directly.
+{
+  const mk = (extra) => ({
+    goalType: 'pop',
+    fixed: [
+      { type: 'bulb', x: 400, y: 660, dir: 'up' },
+      { type: 'lens', x: 600, y: 660, angle: 90 },
+      { type: 'balloon_goal', x: 800, y: 640 },
+      ...(extra || []),
+    ],
+  });
+  const dark = Core.simulate(mk(), [], { maxSeconds: 6, collectEvents: true });
+  check('dark bulb feeds nothing (lens stays cold)', !dark.won && !dark.events.some(e => e.type === 'laser'));
+  const lit = Core.simulate(mk(), [{ type: 'ball_marble', x: 400, y: 560 }], { maxSeconds: 8, collectEvents: true });
+  check('button press -> bulb -> lens -> beam pops the balloon',
+    lit.won && lit.events.some(e => e.type === 'bulb_on') && lit.events.some(e => e.type === 'laser'), `t=${lit.seconds}s`);
+  const blocked = Core.simulate(mk([{ type: 'wall', x: 500, y: 620 }]), [{ type: 'ball_marble', x: 400, y: 560 }], { maxSeconds: 8, collectEvents: true });
+  check('wall between bulb and lens blocks the light — no beam',
+    !blocked.won && blocked.events.some(e => e.type === 'bulb_on') && !blocked.events.some(e => e.type === 'laser'));
+  const wired = Core.createSim({
+    goalType: 'bell',
+    fixed: [
+      { type: 'bulb', x: 450, y: 659, dir: 'right' },
+      { type: 'switch', x: 600, y: 680 },
+      { type: 'bell', x: 1200, y: 100 },
+    ],
+  }, [{ type: 'ball_marble', x: 600, y: 600 }]);
+  let on = false;
+  for (let f = 0; f < 300; f++) for (const e of wired.step()) if (e.type === 'bulb_on') on = true;
+  check('switch-wired bulb lights while the plate is pressed',
+    on && wired.parts.find(p => p.spec.type === 'bulb').bodies[0].plugin.lab.bulb.on);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

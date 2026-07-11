@@ -238,6 +238,8 @@
     fist:        { w: 66,  h: 46,  static: true,  placeable: true, rot: true },
     match:       { w: 12,  h: 54,  static: true,  placeable: true, rot: true },
     laser:       { w: 44,  h: 56,  static: true,  placeable: true, rot: true },
+    bulb:        { w: 44,  h: 58,  static: true,  placeable: true, dir: ['right', 'left', 'up'] },
+    lens:        { w: 46,  h: 26,  static: true,  placeable: true, rot: true },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -261,6 +263,7 @@
     balloon: 'balloon', balloon_goal: 'balloon', bell: 'bell', bowl: 'wood', spikes: 'wood',
     rope: 'wood', scissors: 'magnet', candle: 'wood', fuse: 'wood',
     hydrant: 'magnet', switch: 'wood', fist: 'bumper', match: 'wood', laser: 'magnet',
+    bulb: 'magnet', lens: 'magnet',
   };
 
   const FAN_REACH = 280;
@@ -284,6 +287,9 @@
   const LASER_REACH = 420;
   const LASER_FIRE_FRAMES = 30;     // one trigger buys ~0.5s of beam
   const LASER_COOLDOWN_FRAMES = 50;
+  const BULB_BUTTON_COOLDOWN = 20;  // absorbs one landing's contact rattle,
+                                    // short enough that a re-bounce re-presses
+  const LENS_REACH = 220;           // how close a lit bulb must be to feed a lens
 
   let nextId = 1;
 
@@ -449,6 +455,22 @@
         // first solid body; see applyBehaviours for what it does on the way.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.3, restitution: 0.2 }),
           { laz: { firing: 0, cooldown: 0, beamLen: 0 } }));
+        break;
+
+      case 'bulb':
+        // Lightbulb with a real button on the side spec.dir points to: each
+        // press toggles the light; a wired switch drives it instead. The glow
+        // is harmless by itself — a lens turns it into a beam.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.15 }),
+          { bulb: { on: false, cooldown: 0 } }));
+        break;
+
+      case 'lens':
+        // Focusing lens, rotatable 360°: while a LIT bulb sits within
+        // LENS_REACH with a clear line of sight, it fires the same beam as
+        // the laser cannon along its local "up".
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.1 }),
+          { lens: { firing: 0, beamLen: 0 } }));
         break;
 
       case 'domino':
@@ -619,7 +641,7 @@
       const swBody = p.bodies[0];
       let best = null, bd = SWITCH_WIRE_REACH;
       for (const q of parts) {
-        if (!['fan', 'conveyor', 'magnet', 'hydrant', 'laser'].includes(q.spec.type)) continue;
+        if (!['fan', 'conveyor', 'magnet', 'hydrant', 'laser', 'bulb'].includes(q.spec.type)) continue;
         const d = Math.hypot(q.bodies[0].position.x - swBody.position.x, q.bodies[0].position.y - swBody.position.y);
         if (d < bd) { bd = d; best = q; }
       }
@@ -738,6 +760,25 @@
           lz.cooldown = LASER_FIRE_FRAMES + LASER_COOLDOWN_FRAMES;
           const nx = Math.sin(lc.angle), ny = -Math.cos(lc.angle);
           state.events.push({ type: 'laser', x: lc.position.x + nx * (meta.h / 2 + 4), y: lc.position.y + ny * (meta.h / 2 + 4) });
+        }
+
+        // Bulb button: a press on the face spec.dir points to toggles the
+        // light (switch-wired bulbs ignore the button — the switch decides).
+        for (const [bb, o] of [[a, b], [b, a]]) {
+          const meta = lab(bb), bm = meta.bulb;
+          if (!bm || meta.switchControlled || o.isStatic || o.isSensor) continue;
+          if (bm.cooldown > 0 || relSpeed < 1) continue;
+          const dv = dirVector(meta.dir);
+          const rel = { x: o.position.x - bb.position.x, y: o.position.y - bb.position.y };
+          const along = rel.x * dv.x + rel.y * dv.y;
+          const across = Math.abs(rel.x * dv.y - rel.y * dv.x);
+          const half = dv.x !== 0 ? meta.w / 2 : meta.h / 2;
+          const side = dv.x !== 0 ? meta.h / 2 : meta.w / 2;
+          if (along > half - 8 && across < side + 6) {
+            bm.on = !bm.on;
+            bm.cooldown = BULB_BUTTON_COOLDOWN;
+            state.events.push({ type: bm.on ? 'bulb_on' : 'bulb_off', x: bb.position.x, y: bb.position.y });
+          }
         }
 
         // Spring-loaded fist. Two triggers:
@@ -1151,25 +1192,15 @@
         }
       }
 
-      // Laser cannons: while firing, march the beam to the first solid body;
-      // on the way it pops balloons, lights candles/matches/fuses, and burns
-      // ropes and tether strings. Sensors and balloons never block the beam.
-      for (const p of parts) {
-        if (p.spec.type !== 'laser') continue;
-        const cb = p.bodies[0], m = lab(cb), lz = m.laz;
-        if (m.switchControlled) {
-          if (m.poweredNow && lz.firing <= 0)
-            state.events.push({ type: 'laser', x: cb.position.x, y: cb.position.y });
-          lz.firing = m.poweredNow ? 2 : 0;
-        } else {
-          if (lz.cooldown > 0) lz.cooldown--;
-          if (lz.firing > 0) lz.firing--;
-        }
-        if (lz.firing <= 0) { lz.beamLen = 0; continue; }
+      // The beam engine, shared by the laser cannon and the lens: march from
+      // the emitter's muzzle along local "up" to the first solid body; on the
+      // way pop balloons, light candles/matches/fuses, burn ropes and tether
+      // strings. Sensors and balloons never block the beam.
+      function castBeam(cb, m, bz) {
         const nx = Math.sin(cb.angle), ny = -Math.cos(cb.angle);
         const mz = { x: cb.position.x + nx * (m.h / 2 + 4), y: cb.position.y + ny * (m.h / 2 + 4) };
         let len = LASER_REACH;
-        // whatever is pressed right against the lens — usually the very body
+        // whatever is pressed right against the emitter — often the very body
         // that triggered the shot — must not eat the beam: shoot straight
         // through anything overlapping the first sample point
         const pointBlank = Query.point(all, { x: mz.x + nx * 6, y: mz.y + ny * 6 });
@@ -1183,7 +1214,7 @@
             len = s; break outer;
           }
         }
-        lz.beamLen = len; // renderer draws the beam from this
+        bz.beamLen = len; // renderer draws the beam from this
         const end = { x: mz.x + nx * len, y: mz.y + ny * len };
         for (const b of all) {
           const mb = lab(b);
@@ -1225,6 +1256,67 @@
         }
       }
 
+      // Laser cannons: touch bursts (or a wired switch) drive the beam.
+      for (const p of parts) {
+        if (p.spec.type !== 'laser') continue;
+        const cb = p.bodies[0], m = lab(cb), lz = m.laz;
+        if (m.switchControlled) {
+          if (m.poweredNow && lz.firing <= 0)
+            state.events.push({ type: 'laser', x: cb.position.x, y: cb.position.y });
+          lz.firing = m.poweredNow ? 2 : 0;
+        } else {
+          if (lz.cooldown > 0) lz.cooldown--;
+          if (lz.firing > 0) lz.firing--;
+        }
+        if (lz.firing <= 0) { lz.beamLen = 0; continue; }
+        castBeam(cb, m, lz);
+      }
+
+      // Bulbs tick their button cooldown; a wired switch drives them directly.
+      for (const p of parts) {
+        if (p.spec.type !== 'bulb') continue;
+        const m = lab(p.bodies[0]), bm = m.bulb;
+        if (bm.cooldown > 0) bm.cooldown--;
+        if (m.switchControlled && bm.on !== !!m.poweredNow) {
+          bm.on = !!m.poweredNow;
+          state.events.push({ type: bm.on ? 'bulb_on' : 'bulb_off', x: p.bodies[0].position.x, y: p.bodies[0].position.y });
+        }
+      }
+
+      // Lenses: a LIT bulb within LENS_REACH and in clear line of sight feeds
+      // the lens, which focuses the light into the same beam as the laser.
+      // Solid bodies block the light path (sensors and balloons don't).
+      for (const p of parts) {
+        if (p.spec.type !== 'lens') continue;
+        const lb = p.bodies[0], m = lab(lb), lz = m.lens;
+        let fed = null;
+        for (const q of parts) {
+          if (q.spec.type !== 'bulb' || !lab(q.bodies[0]).bulb.on) continue;
+          const bb = q.bodies[0];
+          const dist = Math.hypot(bb.position.x - lb.position.x, bb.position.y - lb.position.y);
+          if (dist > LENS_REACH) continue;
+          let blocked = false;
+          const steps = Math.max(2, Math.ceil(dist / 8));
+          for (let i = 1; i < steps && !blocked; i++) {
+            const pt = { x: bb.position.x + (lb.position.x - bb.position.x) * i / steps,
+                         y: bb.position.y + (lb.position.y - bb.position.y) * i / steps };
+            for (const o of Query.point(all, pt)) {
+              if (o.isSensor) continue;
+              const mo = lab(o);
+              if (mo && (mo.id === m.id || mo.id === lab(bb).id || mo.poppable)) continue;
+              blocked = true; break;
+            }
+          }
+          if (!blocked) { fed = bb; break; }
+        }
+        m.fedBy = fed ? fed.position : null; // renderer draws the light feed
+        if (fed && lz.firing <= 0)
+          state.events.push({ type: 'laser', x: lb.position.x, y: lb.position.y });
+        lz.firing = fed ? 2 : 0;
+        if (lz.firing <= 0) { lz.beamLen = 0; continue; }
+        castBeam(lb, m, lz);
+      }
+
       // Fist cooldown / punch animation timer.
       for (const p of parts) {
         if (p.spec.type !== 'fist') continue;
@@ -1255,6 +1347,7 @@
         if (p.spec.type === 'match' && lab(p.bodies[0]).match.lit) return false;
         if (p.spec.type === 'hydrant' && lab(p.bodies[0]).hyd.active) return false;
         if (p.spec.type === 'laser' && lab(p.bodies[0]).laz.firing > 0) return false;
+        if (p.spec.type === 'lens' && lab(p.bodies[0]).lens.firing > 0) return false;
       }
       let maxV = 0;
       for (const b of dynamicBodies()) {
@@ -3872,6 +3965,8 @@
         case 'snipclick': sfx('rotate'); break; // blade snap without a cut
         case 'thwack': sfx('thwack'); break;
         case 'laser': sfx('laser'); break;
+        case 'bulb_on': sfx('switchOn'); break;
+        case 'bulb_off': sfx('switchOff'); break;
         case 'switch_on': sfx('switchOn'); break;
         case 'switch_off': sfx('switchOff'); break;
         case 'ignite': sfx('igniteFizz'); break;
@@ -4069,6 +4164,20 @@
     c.fillStyle = 'rgba(143,98,56,0.35)'; circle(c, w * 0.28, 0, 3.5); c.fill();
     c.strokeStyle = 'rgba(143,98,56,0.3)'; c.lineWidth = 1;
     c.beginPath(); c.arc(w * 0.28, 0, 6, -0.5, 2.2); c.stroke();
+  }
+
+  // the laser/lens beam: layered red glow with a sizzling impact burst,
+  // drawn in the emitter's local frame along -y from its muzzle line
+  function drawBeam(c, muzzleY, beamLen, t) {
+    const y1 = muzzleY - 2, y2 = muzzleY - beamLen;
+    for (const [col, wdt] of [['rgba(232,86,63,0.25)', 11], ['rgba(255,120,90,0.6)', 5.5], ['#FFF3B0', 2.2]]) {
+      c.strokeStyle = col; c.lineWidth = wdt; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(0, y1); c.lineTo(0, y2); c.stroke();
+    }
+    c.save(); c.translate(0, y2); c.rotate((t * 9) % TAU);
+    c.fillStyle = C.sunny; star4(c, 0, 0, 9 + Math.sin(t * 21) * 2, 0); c.fill();
+    c.fillStyle = C.paper; circle(c, 0, 0, 3); c.fill();
+    c.restore();
   }
 
   const painters = {
@@ -4700,18 +4809,7 @@
       const firing = lz.firing > 0 && lz.beamLen > 0;
       const my = -d.h / 2; // muzzle line
       // beam first so the cannon sits crisply on top of its root
-      if (firing) {
-        const y1 = my - 2, y2 = my - lz.beamLen;
-        for (const [col, wdt] of [['rgba(232,86,63,0.25)', 11], ['rgba(255,120,90,0.6)', 5.5], ['#FFF3B0', 2.2]]) {
-          c.strokeStyle = col; c.lineWidth = wdt; c.lineCap = 'round';
-          c.beginPath(); c.moveTo(0, y1); c.lineTo(0, y2); c.stroke();
-        }
-        // sizzling impact burst where the beam lands
-        c.save(); c.translate(0, y2); c.rotate((t * 9) % TAU);
-        c.fillStyle = C.sunny; star4(c, 0, 0, 9 + Math.sin(t * 21) * 2, 0); c.fill();
-        c.fillStyle = C.paper; circle(c, 0, 0, 3); c.fill();
-        c.restore();
-      }
+      if (firing) drawBeam(c, my, lz.beamLen, t);
       // tail knob: tells the eye which end is the back
       c.fillStyle = C.poppy; circle(c, 0, 25, 7); c.fill();
       c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, 0, 25, 7); c.stroke();
@@ -4737,6 +4835,81 @@
       c.fillStyle = firing ? '#FFF3B0' : C.sky;
       circle(c, 0, my + 1, 5); c.fill();
       c.globalAlpha = 1;
+    },
+
+    bulb(c, d, a, o, body) {
+      const bm = body ? body.plugin.lab.bulb : { on: false, cooldown: 0 };
+      const t = o ? o.t : 0;
+      // warm halo first, under everything, when lit
+      if (bm.on) {
+        const g0 = c.createRadialGradient(0, -6, 6, 0, -6, 64);
+        g0.addColorStop(0, 'rgba(255,197,61,0.5)'); g0.addColorStop(1, 'rgba(255,197,61,0)');
+        c.fillStyle = g0; circle(c, 0, -6, 64); c.fill();
+      }
+      // wooden housing
+      c.fillStyle = C.woodLight; rr(c, -d.w / 2, -d.h / 2, d.w, d.h, 9); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, -d.h / 2, d.w, d.h, 9); c.stroke();
+      // the button, on the face spec.dir points to (pressed-in while cooling)
+      const dv = d.dir === 'left' ? { x: -1, y: 0 } : d.dir === 'up' ? { x: 0, y: -1 } : { x: 1, y: 0 };
+      const bx = dv.x * (d.w / 2 - 1), by2 = dv.y * (d.h / 2 - 1);
+      const pop2 = bm.cooldown > 0 ? 3 : 6;
+      c.save(); c.translate(bx, by2); c.rotate(Math.atan2(dv.y, dv.x));
+      c.fillStyle = C.poppy; rr(c, -2, -11, pop2 + 2, 22, 3); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -2, -11, pop2 + 2, 22, 3); c.stroke();
+      c.restore();
+      // lamp glass
+      const g1 = c.createRadialGradient(-4, -10, 2, 0, -6, 17);
+      if (bm.on) { g1.addColorStop(0, '#FFF6C8'); g1.addColorStop(0.6, C.sunny); g1.addColorStop(1, C.tangerine); }
+      else { g1.addColorStop(0, '#EEF3F5'); g1.addColorStop(1, '#B9C8CE'); }
+      c.fillStyle = g1; circle(c, 0, -6, 16); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, 0, -6, 16); c.stroke();
+      // filament zigzag (dark when off, white-hot when on)
+      c.strokeStyle = bm.on ? '#FFF9EE' : 'rgba(67,52,43,0.45)'; c.lineWidth = 1.8;
+      c.beginPath(); c.moveTo(-6, -3);
+      for (let i = 0; i <= 4; i++) c.lineTo(-6 + i * 3, i % 2 ? -9 : -3);
+      c.stroke();
+      // screw base under the glass
+      c.fillStyle = C.inkSoft; rr(c, -8, 9, 16, 10, 2); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -8, 9, 16, 10, 2); c.stroke();
+      c.strokeStyle = 'rgba(255,249,238,0.5)'; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(-7, 12); c.lineTo(7, 13); c.moveTo(-7, 15); c.lineTo(7, 16); c.stroke();
+      // sparkle charm when lit
+      if (bm.on) { c.fillStyle = C.paper; star4(c, 8, -12, 3.5, 0.2 + t); c.fill(); }
+    },
+
+    lens(c, d, a, o, body) {
+      const lz = body ? body.plugin.lab.lens : { firing: 0, beamLen: 0 };
+      const t = o ? o.t : 0;
+      const firing = lz.firing > 0 && lz.beamLen > 0;
+      // incoming light: a soft ray from the feeding bulb into the lens
+      const fed = body && body.plugin.lab.fedBy;
+      if (fed) {
+        const dx = fed.x - body.position.x, dy = fed.y - body.position.y;
+        const ca = Math.cos(-body.angle), sa = Math.sin(-body.angle);
+        const lx = dx * ca - dy * sa, ly = dx * sa + dy * ca;
+        const g0 = c.createLinearGradient(0, 0, lx, ly);
+        g0.addColorStop(0, 'rgba(255,197,61,0.55)'); g0.addColorStop(1, 'rgba(255,197,61,0)');
+        c.strokeStyle = g0; c.lineWidth = 10; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(0, 0); c.lineTo(lx, ly); c.stroke();
+      }
+      if (firing) drawBeam(c, -d.h / 2, lz.beamLen, t);
+      // mount
+      c.fillStyle = C.woodMid; rr(c, -d.w / 2, d.h / 2 - 7, d.w, 7, 3); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -d.w / 2, d.h / 2 - 7, d.w, 7, 3); c.stroke();
+      // lens glass, edge-on: a wide sparkling ellipse in a deep-blue rim
+      c.fillStyle = C.blueDeep;
+      c.beginPath(); c.ellipse(0, -2, d.w / 2 - 2, 9, 0, 0, TAU); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2;
+      c.beginPath(); c.ellipse(0, -2, d.w / 2 - 2, 9, 0, 0, TAU); c.stroke();
+      const g1 = c.createRadialGradient(-5, -4, 1, 0, -2, 18);
+      g1.addColorStop(0, '#E8F6FD'); g1.addColorStop(0.6, C.sky); g1.addColorStop(1, '#5FA8CC');
+      c.fillStyle = g1;
+      c.beginPath(); c.ellipse(0, -2, d.w / 2 - 6, 6, 0, 0, TAU); c.fill();
+      // glint
+      c.fillStyle = 'rgba(255,249,238,0.85)';
+      c.beginPath(); c.ellipse(-8, -4, 4, 1.8, -0.3, 0, TAU); c.fill();
+      // charge shimmer while focusing
+      if (fed) { c.fillStyle = C.sunny; star4(c, 10, -5, 3 + Math.sin(t * 9) * 0.8, 0.3); c.fill(); }
     },
 
     sparkle(c, d, a, o) {
@@ -5001,6 +5174,8 @@
           if (e.bodyId != null) squash.set(e.bodyId, { t: 0, nx: 0, ny: 1, amt: 0.3 });
           break;
         case 'laser': fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 4); break;
+        case 'bulb_on': fx.ring(e.x, e.y, C.sunny); fx.stars(e.x, e.y - 10, 3); break;
+        case 'bulb_off': fx.poof(e.x, e.y - 10, 3); break;
         case 'win': shakeT = 0; break;
       }
     }
@@ -5366,6 +5541,8 @@
     // back into the scene (the escape hatch for editing a saved puzzle).
     // Sparkles are author-only scenery — never tray pieces.
     if (sandbox && sel.type !== 'sparkle') defsBtns.push({ id: 'pluck', icon: sel._plucked ? '📌' : '🧩', col: C.leaf });
+    // every part explains itself: ? makes Lory describe it
+    defsBtns.push({ id: 'info', icon: '?', col: C.sky });
     defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
     const pitch = 54 * B;
     let total = defsBtns.length * pitch - 10 * B + 14 * B;
@@ -5390,7 +5567,7 @@
   }
 
   // tray. boost enlarges wells on small screens where the level's tray is
-  // small enough to still fit (the 29-well sandbox stays width-bound).
+  // small enough to still fit (the 31-well sandbox stays width-bound).
   function drawTray(c, tray, o, dragType, boost) {
     const B = boost || 1;
     const y0 = BOARD_H;
@@ -5658,7 +5835,7 @@
   const SANDBOX_TRAY = [
     ['plank', 8], ['shelf', 4], ['wall', 2], ['trampoline', 3], ['seesaw', 2], ['fan', 3],
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
-    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2],
+    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2], ['bulb', 2], ['lens', 2],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
     ['balloon_goal', 4], ['spikes', 2], ['sparkle', 3],
   ];
@@ -6107,6 +6284,47 @@
     rebuildSim();
     A.sfx('rotate');
   }
+  // What every part does, in Lory's voice — shown by the ? selection button.
+  const PART_INFO = {
+    plank: 'A wooden plank! Tilt it to make ramps and bridges.',
+    shelf: 'A sturdy shelf — things can stand and roll on it.',
+    wall: 'A tall wall. Nothing gets through!',
+    trampoline: 'Boing! Whatever falls on it bounces way up.',
+    seesaw: 'A seesaw! Drop something on one side to fling what sits on the other.',
+    fan: 'It blows a steady wind! Light things fly away — but never my berry.',
+    magnet: 'Bump it awake and it pulls metal marbles. Only marbles!',
+    domino: 'Line up dominoes and tip the first one — click, clack, click!',
+    conveyor: 'A moving belt! It carries things along — flip it with ⇄.',
+    bumper: 'Boing-boing! Everything bounces off it, super hard.',
+    balloon: 'It floats up, up, up! Pointy and hot things pop it.',
+    bucket: 'It catches things and keeps them. No way out!',
+    rope: 'It grabs whatever hangs near its end. Scissors, fire or the laser set it free!',
+    scissors: 'Snip! Touch them and they cut ropes and balloon strings.',
+    candle: 'A little flame! It lights fuses and matches, pops balloons and burns strings. Water blows it out — tap 🔥/💨 to start it lit or cold.',
+    match: 'Bump it and it strikes a big flame — just for a moment, then it is spent!',
+    fuse: 'Fire crawls along it — a slow-burning path for your flame.',
+    hydrant: 'Bump it and it sprays water! Water pushes things and puts out fire.',
+    switch: 'A pressure plate! It powers the nearest machine while something sits on it.',
+    fist: 'A spring-loaded punch! Touch the glove — or press the button on its back to fire it like a cannon.',
+    laser: 'PEW! Touch it and the beam pops balloons, lights fires and cuts strings. Walls block it.',
+    bulb: 'Press its button to switch the light on and off — ⇄ moves the button. Shine it into a lens!',
+    lens: 'It focuses light! Put it near a glowing bulb and out comes a laser beam.',
+    ball_beach: 'A light, bouncy beach ball — the wind loves it.',
+    ball_marble: 'A heavy metal marble. Magnets love it!',
+    berry: 'My berry! Roll it into my bowl to feed me!',
+    bowl: 'My bowl! A berry that lands here feeds me. Yum!',
+    bell: 'Ring it with a good bump! Ding!',
+    balloon_goal: 'A tied balloon. Cut or burn its string and up it goes!',
+    spikes: 'A prickly cactus! Balloons that touch it go POP.',
+    sparkle: 'A bonus star! Whoever plays your puzzle grabs it by passing through.',
+  };
+  function showPartInfo() {
+    const p = S.placements[S.selection];
+    if (!p) return;
+    A.sfx('button');
+    setLory('think', PART_INFO[p.type] || 'A mysterious part!', 8);
+  }
+
   function toggleLitSelection() {
     const p = S.placements[S.selection];
     if (!p || p.type !== 'candle') return;
@@ -6660,6 +6878,7 @@
         if (b.id === 'flip') flipSelection();
         if (b.id === 'lit') toggleLitSelection();
         if (b.id === 'pluck') togglePluckSelection();
+        if (b.id === 'info') showPartInfo();
         if (b.id === 'del') { A.sfx('pickup'); removePlacement(S.selection); }
         return;
       }

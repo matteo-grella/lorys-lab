@@ -51,8 +51,9 @@ persistent saved puzzles, puzzle sharing via links and `.lorypuzzle` files
 pickups, two age modes, and a secret unlock cheat. The sandbox additionally
 carries the "machine shop": ropes, triggered scissors, candles (placeable lit
 or cold), strike-anywhere matches, fuses, bump-activated hydrants, pressure
-switches, a rotatable spring fist, and a rotatable laser cannon — fire, water,
-light, cutting, and remote triggering as composable systems.
+switches, a rotatable spring fist, a rotatable laser cannon, and a
+button-toggled lightbulb whose light a lens focuses into that same beam —
+fire, water, light, cutting, and remote triggering as composable systems.
 
 **Everything in-game is code-generated**: all art is Canvas 2D paths, all
 audio is WebAudio synthesis — zero binary assets at runtime. (The repo does
@@ -92,7 +93,7 @@ lorys-lab/
 │                            path — the filename rotates when the artifact URL
 │                            has to be re-minted; check build.mjs for current)
 ├── test/
-│   ├── smoke.mjs            54 physics behaviour proofs (run in Node)
+│   ├── smoke.mjs            61 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   ├── puzzlecode.mjs       puzzle wire-format roundtrip + hostile-input proofs
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
@@ -211,10 +212,12 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `candle` | 26×58 | ✓ | ✓ (sandbox) | – | – | lit by default, `spec.lit:false` places it cold (editor 🔥/💨 toggle on the selected candle); flame tip ignites fuses/matches/cold candles, pops balloons, burns ropes and balloon strings; doused by water; relightable by any flame or laser |
 | `fuse` | 130×12 | ✓ sensor | ✓ (sandbox) | ✓ | – | bodies pass through; burns as interval [a,b] from ignition point both ways in ~2.5s (`FUSE_BURN_FRAMES 150`); fronts are flame points |
 | `hydrant` | 52×62 | ✓ | ✓ (sandbox) | – | right/left/up | sleepy like the magnet: a bump (relSpeed ≥ 1.6) opens the valve for `HYDRANT_ACTIVE_FRAMES 180` (~3s), or a wired switch drives it; while active the jet (reach 240, half-width 46) pushes EVERYTHING incl. berries (marbles reduced) and extinguishes flames. Events `water_on/water_off` drive the audio loop |
-| `switch` | 84×20 | ✓ | ✓ (sandbox) | – | – | pressure plate; wires to nearest fan/conveyor/magnet/hydrant/laser within 260px at sim start; device runs only while pressed (magnet: switch replaces bump/timer) |
+| `switch` | 84×20 | ✓ | ✓ (sandbox) | – | – | pressure plate; wires to nearest fan/conveyor/magnet/hydrant/laser/bulb within 260px at sim start; device runs only while pressed (magnet: switch replaces bump/timer) |
 | `fist` | 66×46 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360°: punches along its facing at 15 px/f (`FIST_LAUNCH`, tangential velocity preserved), 60-frame cooldown. Two triggers: contact on the GLOVE side (local −y) punches the toucher; contact on the BACK plunger (local +y) fires remotely, launching everything in the muzzle zone (≤55px in front) — a pre-loadable cannon |
 | `match` | 12×54 | ✓ | ✓ (sandbox) | ✓ | – | strike-anywhere: a bump (relSpeed ≥ 1.6), any flame, or the laser flares the head (local −y end) into a real flame point for `MATCH_FLARE_FRAMES 150` (~2.5s), then it is spent for good; water also spends it. One-shot touch→fire converter |
 | `laser` | 44×56 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360° cannon (tray default `angle:90` — fires sideways): any touch fires the beam along local −y for `LASER_FIRE_FRAMES 30` (~0.5s, 50-frame re-arm); a wired switch holds the beam on instead. Beam (reach `LASER_REACH 420`, first solid body blocks it; sensors/balloons never do, and neither does anything pressed against the lens — the trigger ball must not eat its own shot) pops balloons, lights candles/matches, ignites fuses at the crossing point, burns ropes and tether strings (snip cause `'fire'`). Event `laser` on firing; renderer draws the beam from `lab.laz.beamLen` |
+| `bulb` | 44×58 | ✓ | ✓ (sandbox) | – | right/left/up | lightbulb with a REAL button on the `dir` face: each press (relSpeed ≥ 1, `BULB_BUTTON_COOLDOWN 20` absorbs contact rattle) toggles the light; a wired switch drives it instead. The glow itself is harmless — a lens weaponizes it. Events `bulb_on/bulb_off` |
+| `lens` | 46×26 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360°: while a LIT bulb sits within `LENS_REACH 220` with a clear line of sight (solids block light; sensors/balloons don't), it fires the same beam as the laser along local −y (shared `castBeam`); `lab.fedBy` tells the renderer where the light ray comes from |
 | `shelf` | w×24 (default 200) | ✓ | fixed-only | ✓ | – | `sizable` (levels set w/h/angle) |
 | `wall` | 24×200 | ✓ | fixed-only | – | – | `sizable` |
 | `berry` | r 16 | dynamic | fixed-only* | – | – | THE goal ball; `isBerry` flag |
@@ -291,16 +294,16 @@ Executed **before** each `Engine.update`:
   `F_up = mass × gravity × 0.001 × 1.65` each frame (net ~0.65 g upward);
   `frictionAir 0.045` caps rise speed at ~1–2 px/f.
 - **Machine shop (sandbox parts).** All wired in `createSim` (ropes tether the
-  nearest dynamic body; switches link the nearest fan/conveyor/magnet/hydrant/laser,
+  nearest dynamic body; switches link the nearest fan/conveyor/magnet/hydrant/laser/bulb,
   marking it `switchControlled`) and simulated in `applyBehaviours` in this order:
   pressure-switch scan → device gating (`poweredNow`) → fan/magnet/balloon →
   conveyor pairs → hydrant push+douse → fuse-interval advance → match burn-down →
   flame-point collection (candles + matches + fuse fronts) → flame effects
   (pop/ignite/relight/strike-match/burn-rope) → scissors-rope intersection →
-  laser beam (march + burn) → fist cooldown. New events: `snip {cause:'blade'|'fire'}`,
-  `ignite`, `extinguish`, `switch_on/off`, `thwack`, `water_on/off`, `laser`. A burning
-  fuse, a flaring match, a spraying hydrant or a firing laser suppresses the
-  quiescence detector (pending action is not "stuck"). The `'water'`
+  laser beam → bulb tick → lens feed (both share `castBeam`) → fist cooldown. New events: `snip {cause:'blade'|'fire'}`,
+  `ignite`, `extinguish`, `switch_on/off`, `thwack`, `water_on/off`, `laser`, `bulb_on/off`. A burning
+  fuse, a flaring match, a spraying hydrant or a firing laser/lens suppresses
+  the quiescence detector (pending action is not "stuck"). The `'water'`
   audio loop is event-driven: `water_on`/`water_off` start/stop it inside
   audio.js `handleEvents` (NOT in game.js `startLoops`).
 - **Conveyor drive.** For each active collision pair involving a conveyor:
@@ -362,8 +365,8 @@ consecutive frames**, `state.settled = true`. The game treats settled (or
 t > 45 s) as "try again". The sandbox instead reads `quietFrames` directly
 and auto-stops the run back to edit mode after **90 quiet frames** (~1.5 s)
 — the ◼ button still stops it earlier. A burning fuse, a flaring match, a
-spraying hydrant or a firing laser suppresses the quiet counter (pending
-action is not "stuck").
+spraying hydrant or a firing laser/lens suppresses the quiet counter
+(pending action is not "stuck").
 ⚠️ Slow-creeping mechanisms (long domino chains leaning quasi-statically) can
 trip this while still "working". Design fast mechanisms, or keep something
 moving (e.g. a ball bouncing on a trampoline resets the quiet counter).
@@ -391,7 +394,8 @@ The game forwards them to `LoryAudio.handleEvents()` and
 | `switch_on` / `switch_off` | x, y | pressure plate pressed/released | audio (clicks), render (ring) |
 | `thwack` | x, y, bodyId?, partId | fist fired (either trigger) | audio (punch + twang), render (ring/stars + squash) |
 | `water_on` / `water_off` | x, y | hydrant valve opens/closes | audio (water loop start/stop), render (ring/poof); droplet FX read `lab.hyd.active` directly |
-| `laser` | x, y | cannon fires (touch burst or switch rising edge) | audio (PEW zap), render (ring + stars); the beam itself is drawn from `lab.laz.beamLen`, not the event |
+| `laser` | x, y | cannon OR lens starts firing (touch burst, switch edge, light feed) | audio (PEW zap), render (ring + stars); the beam itself is drawn from `lab.laz.beamLen`/`lab.lens.beamLen`, not the event |
+| `bulb_on` / `bulb_off` | x, y | bulb toggled (button press or wired switch) | audio (switch clicks), render (sunny ring / poof) |
 
 If you add an event type, update **both** consumers or nothing will happen —
 they ignore unknown types silently.
@@ -541,7 +545,7 @@ new total) before you build.
 Run everything from the project root:
 
 ```bash
-node test/smoke.mjs      # 54 physics behaviour proofs — every part & interaction
+node test/smoke.mjs      # 61 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
 node test/puzzlecode.mjs # puzzle wire-format roundtrip + hostile-input proofs
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext
@@ -549,7 +553,7 @@ node --check src/*.js    # syntax gate for every module
 node build.mjs           # regenerates dist/ (see §10)
 ```
 
-**Definition of green**: smoke N/N (currently 54/54), verify N/N (currently 24/24),
+**Definition of green**: smoke N/N (currently 61/61), verify N/N (currently 24/24),
 puzzlecode N/N (currently 31/31), audio-shape passes, all `--check`s pass.
 
 ### Browser E2E (Playwright, or bare headless Chrome)
@@ -680,17 +684,18 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
 - **Plucked parts** (puzzle maker): if `spec._plucked` is truthy the part
   renders at 35% alpha with an orange dashed box + 🧩 badge.
 - **Selection UI**: `drawSelection(c, sel, o, boost, sandbox)` returns button
-  hit-circles (`{id:'rotl'|'rotr'|'flip'|'lit'|'pluck'|'del', x, y, r:28*boost}`;
+  hit-circles (`{id:'rotl'|'rotr'|'flip'|'lit'|'pluck'|'info'|'del', x, y, r:28*boost}`;
   `lit` 🔥/💨 only on candles, `pluck` 🧩/📌 only in the sandbox — it toggles
   `spec._plucked` without entering pluck mode, THE way to revert a saved
-  puzzle's hidden-part marks). Buttons
+  puzzle's hidden-part marks; `info` ? on EVERY part — Lory explains it from
+  game.js `PART_INFO`). Buttons
   render above the part, or **below** it when the part is near the top (they
   must never hide under the DOM topbar). The ✕ delete button gets extra
   spacing. `boost` is the mobile touch-target compensation (see game.js
   `uiBoost`, 1 on desktop/iPad, up to 1.7 on phones) — all sizes and the
   returned hit radii scale by it.
 - **Tray**: `drawTray(c, tray, o, dragType, boost)` computes adaptive well
-  sizes (`wellW = min(88*boost, (viewW-30)/n)` — the 29-well sandbox is width-bound
+  sizes (`wellW = min(88*boost, (viewW-30)/n)` — the 31-well sandbox is width-bound
   on desktop and gains room on full-bleed phones) and returns well hit-regions
   `{type, x, y, w, count}`.
 - **`draw(frame)`** is the single entry point; frame =
@@ -847,7 +852,7 @@ silently. All shapes are defaulted on load — never assume fields exist.
   `puzzleWins`, `puzzleSeq` but **keeps settings** (mode/sfx/music/juice).
   The title screen carries only a music toggle (`#tMusic`, labeled) next to
   Start fresh; sound effects toggle only in the in-game topbar (`#sfxBtn`).
-- **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (29 entries incl. the machine shop and
+- **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (31 entries incl. the machine shop and
   fixed-only parts); no "try again" stuck flow, but the run auto-stops back
   to edit after ~1.5 s of stillness (§4.4); win events celebrate (confetti +
   reset of `won/caughtFrames/bellRung`) but never end the run.

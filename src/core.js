@@ -38,6 +38,8 @@
     fist:        { w: 66,  h: 46,  static: true,  placeable: true, rot: true },
     match:       { w: 12,  h: 54,  static: true,  placeable: true, rot: true },
     laser:       { w: 44,  h: 56,  static: true,  placeable: true, rot: true },
+    bulb:        { w: 44,  h: 58,  static: true,  placeable: true, dir: ['right', 'left', 'up'] },
+    lens:        { w: 46,  h: 26,  static: true,  placeable: true, rot: true },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -61,6 +63,7 @@
     balloon: 'balloon', balloon_goal: 'balloon', bell: 'bell', bowl: 'wood', spikes: 'wood',
     rope: 'wood', scissors: 'magnet', candle: 'wood', fuse: 'wood',
     hydrant: 'magnet', switch: 'wood', fist: 'bumper', match: 'wood', laser: 'magnet',
+    bulb: 'magnet', lens: 'magnet',
   };
 
   const FAN_REACH = 280;
@@ -84,6 +87,9 @@
   const LASER_REACH = 420;
   const LASER_FIRE_FRAMES = 30;     // one trigger buys ~0.5s of beam
   const LASER_COOLDOWN_FRAMES = 50;
+  const BULB_BUTTON_COOLDOWN = 20;  // absorbs one landing's contact rattle,
+                                    // short enough that a re-bounce re-presses
+  const LENS_REACH = 220;           // how close a lit bulb must be to feed a lens
 
   let nextId = 1;
 
@@ -249,6 +255,22 @@
         // first solid body; see applyBehaviours for what it does on the way.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.3, restitution: 0.2 }),
           { laz: { firing: 0, cooldown: 0, beamLen: 0 } }));
+        break;
+
+      case 'bulb':
+        // Lightbulb with a real button on the side spec.dir points to: each
+        // press toggles the light; a wired switch drives it instead. The glow
+        // is harmless by itself — a lens turns it into a beam.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.15 }),
+          { bulb: { on: false, cooldown: 0 } }));
+        break;
+
+      case 'lens':
+        // Focusing lens, rotatable 360°: while a LIT bulb sits within
+        // LENS_REACH with a clear line of sight, it fires the same beam as
+        // the laser cannon along its local "up".
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.1 }),
+          { lens: { firing: 0, beamLen: 0 } }));
         break;
 
       case 'domino':
@@ -419,7 +441,7 @@
       const swBody = p.bodies[0];
       let best = null, bd = SWITCH_WIRE_REACH;
       for (const q of parts) {
-        if (!['fan', 'conveyor', 'magnet', 'hydrant', 'laser'].includes(q.spec.type)) continue;
+        if (!['fan', 'conveyor', 'magnet', 'hydrant', 'laser', 'bulb'].includes(q.spec.type)) continue;
         const d = Math.hypot(q.bodies[0].position.x - swBody.position.x, q.bodies[0].position.y - swBody.position.y);
         if (d < bd) { bd = d; best = q; }
       }
@@ -538,6 +560,25 @@
           lz.cooldown = LASER_FIRE_FRAMES + LASER_COOLDOWN_FRAMES;
           const nx = Math.sin(lc.angle), ny = -Math.cos(lc.angle);
           state.events.push({ type: 'laser', x: lc.position.x + nx * (meta.h / 2 + 4), y: lc.position.y + ny * (meta.h / 2 + 4) });
+        }
+
+        // Bulb button: a press on the face spec.dir points to toggles the
+        // light (switch-wired bulbs ignore the button — the switch decides).
+        for (const [bb, o] of [[a, b], [b, a]]) {
+          const meta = lab(bb), bm = meta.bulb;
+          if (!bm || meta.switchControlled || o.isStatic || o.isSensor) continue;
+          if (bm.cooldown > 0 || relSpeed < 1) continue;
+          const dv = dirVector(meta.dir);
+          const rel = { x: o.position.x - bb.position.x, y: o.position.y - bb.position.y };
+          const along = rel.x * dv.x + rel.y * dv.y;
+          const across = Math.abs(rel.x * dv.y - rel.y * dv.x);
+          const half = dv.x !== 0 ? meta.w / 2 : meta.h / 2;
+          const side = dv.x !== 0 ? meta.h / 2 : meta.w / 2;
+          if (along > half - 8 && across < side + 6) {
+            bm.on = !bm.on;
+            bm.cooldown = BULB_BUTTON_COOLDOWN;
+            state.events.push({ type: bm.on ? 'bulb_on' : 'bulb_off', x: bb.position.x, y: bb.position.y });
+          }
         }
 
         // Spring-loaded fist. Two triggers:
@@ -951,25 +992,15 @@
         }
       }
 
-      // Laser cannons: while firing, march the beam to the first solid body;
-      // on the way it pops balloons, lights candles/matches/fuses, and burns
-      // ropes and tether strings. Sensors and balloons never block the beam.
-      for (const p of parts) {
-        if (p.spec.type !== 'laser') continue;
-        const cb = p.bodies[0], m = lab(cb), lz = m.laz;
-        if (m.switchControlled) {
-          if (m.poweredNow && lz.firing <= 0)
-            state.events.push({ type: 'laser', x: cb.position.x, y: cb.position.y });
-          lz.firing = m.poweredNow ? 2 : 0;
-        } else {
-          if (lz.cooldown > 0) lz.cooldown--;
-          if (lz.firing > 0) lz.firing--;
-        }
-        if (lz.firing <= 0) { lz.beamLen = 0; continue; }
+      // The beam engine, shared by the laser cannon and the lens: march from
+      // the emitter's muzzle along local "up" to the first solid body; on the
+      // way pop balloons, light candles/matches/fuses, burn ropes and tether
+      // strings. Sensors and balloons never block the beam.
+      function castBeam(cb, m, bz) {
         const nx = Math.sin(cb.angle), ny = -Math.cos(cb.angle);
         const mz = { x: cb.position.x + nx * (m.h / 2 + 4), y: cb.position.y + ny * (m.h / 2 + 4) };
         let len = LASER_REACH;
-        // whatever is pressed right against the lens — usually the very body
+        // whatever is pressed right against the emitter — often the very body
         // that triggered the shot — must not eat the beam: shoot straight
         // through anything overlapping the first sample point
         const pointBlank = Query.point(all, { x: mz.x + nx * 6, y: mz.y + ny * 6 });
@@ -983,7 +1014,7 @@
             len = s; break outer;
           }
         }
-        lz.beamLen = len; // renderer draws the beam from this
+        bz.beamLen = len; // renderer draws the beam from this
         const end = { x: mz.x + nx * len, y: mz.y + ny * len };
         for (const b of all) {
           const mb = lab(b);
@@ -1025,6 +1056,67 @@
         }
       }
 
+      // Laser cannons: touch bursts (or a wired switch) drive the beam.
+      for (const p of parts) {
+        if (p.spec.type !== 'laser') continue;
+        const cb = p.bodies[0], m = lab(cb), lz = m.laz;
+        if (m.switchControlled) {
+          if (m.poweredNow && lz.firing <= 0)
+            state.events.push({ type: 'laser', x: cb.position.x, y: cb.position.y });
+          lz.firing = m.poweredNow ? 2 : 0;
+        } else {
+          if (lz.cooldown > 0) lz.cooldown--;
+          if (lz.firing > 0) lz.firing--;
+        }
+        if (lz.firing <= 0) { lz.beamLen = 0; continue; }
+        castBeam(cb, m, lz);
+      }
+
+      // Bulbs tick their button cooldown; a wired switch drives them directly.
+      for (const p of parts) {
+        if (p.spec.type !== 'bulb') continue;
+        const m = lab(p.bodies[0]), bm = m.bulb;
+        if (bm.cooldown > 0) bm.cooldown--;
+        if (m.switchControlled && bm.on !== !!m.poweredNow) {
+          bm.on = !!m.poweredNow;
+          state.events.push({ type: bm.on ? 'bulb_on' : 'bulb_off', x: p.bodies[0].position.x, y: p.bodies[0].position.y });
+        }
+      }
+
+      // Lenses: a LIT bulb within LENS_REACH and in clear line of sight feeds
+      // the lens, which focuses the light into the same beam as the laser.
+      // Solid bodies block the light path (sensors and balloons don't).
+      for (const p of parts) {
+        if (p.spec.type !== 'lens') continue;
+        const lb = p.bodies[0], m = lab(lb), lz = m.lens;
+        let fed = null;
+        for (const q of parts) {
+          if (q.spec.type !== 'bulb' || !lab(q.bodies[0]).bulb.on) continue;
+          const bb = q.bodies[0];
+          const dist = Math.hypot(bb.position.x - lb.position.x, bb.position.y - lb.position.y);
+          if (dist > LENS_REACH) continue;
+          let blocked = false;
+          const steps = Math.max(2, Math.ceil(dist / 8));
+          for (let i = 1; i < steps && !blocked; i++) {
+            const pt = { x: bb.position.x + (lb.position.x - bb.position.x) * i / steps,
+                         y: bb.position.y + (lb.position.y - bb.position.y) * i / steps };
+            for (const o of Query.point(all, pt)) {
+              if (o.isSensor) continue;
+              const mo = lab(o);
+              if (mo && (mo.id === m.id || mo.id === lab(bb).id || mo.poppable)) continue;
+              blocked = true; break;
+            }
+          }
+          if (!blocked) { fed = bb; break; }
+        }
+        m.fedBy = fed ? fed.position : null; // renderer draws the light feed
+        if (fed && lz.firing <= 0)
+          state.events.push({ type: 'laser', x: lb.position.x, y: lb.position.y });
+        lz.firing = fed ? 2 : 0;
+        if (lz.firing <= 0) { lz.beamLen = 0; continue; }
+        castBeam(lb, m, lz);
+      }
+
       // Fist cooldown / punch animation timer.
       for (const p of parts) {
         if (p.spec.type !== 'fist') continue;
@@ -1055,6 +1147,7 @@
         if (p.spec.type === 'match' && lab(p.bodies[0]).match.lit) return false;
         if (p.spec.type === 'hydrant' && lab(p.bodies[0]).hyd.active) return false;
         if (p.spec.type === 'laser' && lab(p.bodies[0]).laz.firing > 0) return false;
+        if (p.spec.type === 'lens' && lab(p.bodies[0]).lens.firing > 0) return false;
       }
       let maxV = 0;
       for (const b of dynamicBodies()) {

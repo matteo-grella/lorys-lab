@@ -581,6 +581,8 @@
         case 'snipclick': sfx('rotate'); break; // blade snap without a cut
         case 'thwack': sfx('thwack'); break;
         case 'laser': sfx('laser'); break;
+        case 'bulb_on': sfx('switchOn'); break;
+        case 'bulb_off': sfx('switchOff'); break;
         case 'switch_on': sfx('switchOn'); break;
         case 'switch_off': sfx('switchOff'); break;
         case 'ignite': sfx('igniteFizz'); break;

@@ -166,6 +166,20 @@
     c.beginPath(); c.arc(w * 0.28, 0, 6, -0.5, 2.2); c.stroke();
   }
 
+  // the laser/lens beam: layered red glow with a sizzling impact burst,
+  // drawn in the emitter's local frame along -y from its muzzle line
+  function drawBeam(c, muzzleY, beamLen, t) {
+    const y1 = muzzleY - 2, y2 = muzzleY - beamLen;
+    for (const [col, wdt] of [['rgba(232,86,63,0.25)', 11], ['rgba(255,120,90,0.6)', 5.5], ['#FFF3B0', 2.2]]) {
+      c.strokeStyle = col; c.lineWidth = wdt; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(0, y1); c.lineTo(0, y2); c.stroke();
+    }
+    c.save(); c.translate(0, y2); c.rotate((t * 9) % TAU);
+    c.fillStyle = C.sunny; star4(c, 0, 0, 9 + Math.sin(t * 21) * 2, 0); c.fill();
+    c.fillStyle = C.paper; circle(c, 0, 0, 3); c.fill();
+    c.restore();
+  }
+
   const painters = {
     plank(c, d) { woodBlock(c, d.w, d.h, 8); },
 
@@ -795,18 +809,7 @@
       const firing = lz.firing > 0 && lz.beamLen > 0;
       const my = -d.h / 2; // muzzle line
       // beam first so the cannon sits crisply on top of its root
-      if (firing) {
-        const y1 = my - 2, y2 = my - lz.beamLen;
-        for (const [col, wdt] of [['rgba(232,86,63,0.25)', 11], ['rgba(255,120,90,0.6)', 5.5], ['#FFF3B0', 2.2]]) {
-          c.strokeStyle = col; c.lineWidth = wdt; c.lineCap = 'round';
-          c.beginPath(); c.moveTo(0, y1); c.lineTo(0, y2); c.stroke();
-        }
-        // sizzling impact burst where the beam lands
-        c.save(); c.translate(0, y2); c.rotate((t * 9) % TAU);
-        c.fillStyle = C.sunny; star4(c, 0, 0, 9 + Math.sin(t * 21) * 2, 0); c.fill();
-        c.fillStyle = C.paper; circle(c, 0, 0, 3); c.fill();
-        c.restore();
-      }
+      if (firing) drawBeam(c, my, lz.beamLen, t);
       // tail knob: tells the eye which end is the back
       c.fillStyle = C.poppy; circle(c, 0, 25, 7); c.fill();
       c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, 0, 25, 7); c.stroke();
@@ -832,6 +835,81 @@
       c.fillStyle = firing ? '#FFF3B0' : C.sky;
       circle(c, 0, my + 1, 5); c.fill();
       c.globalAlpha = 1;
+    },
+
+    bulb(c, d, a, o, body) {
+      const bm = body ? body.plugin.lab.bulb : { on: false, cooldown: 0 };
+      const t = o ? o.t : 0;
+      // warm halo first, under everything, when lit
+      if (bm.on) {
+        const g0 = c.createRadialGradient(0, -6, 6, 0, -6, 64);
+        g0.addColorStop(0, 'rgba(255,197,61,0.5)'); g0.addColorStop(1, 'rgba(255,197,61,0)');
+        c.fillStyle = g0; circle(c, 0, -6, 64); c.fill();
+      }
+      // wooden housing
+      c.fillStyle = C.woodLight; rr(c, -d.w / 2, -d.h / 2, d.w, d.h, 9); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, -d.h / 2, d.w, d.h, 9); c.stroke();
+      // the button, on the face spec.dir points to (pressed-in while cooling)
+      const dv = d.dir === 'left' ? { x: -1, y: 0 } : d.dir === 'up' ? { x: 0, y: -1 } : { x: 1, y: 0 };
+      const bx = dv.x * (d.w / 2 - 1), by2 = dv.y * (d.h / 2 - 1);
+      const pop2 = bm.cooldown > 0 ? 3 : 6;
+      c.save(); c.translate(bx, by2); c.rotate(Math.atan2(dv.y, dv.x));
+      c.fillStyle = C.poppy; rr(c, -2, -11, pop2 + 2, 22, 3); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -2, -11, pop2 + 2, 22, 3); c.stroke();
+      c.restore();
+      // lamp glass
+      const g1 = c.createRadialGradient(-4, -10, 2, 0, -6, 17);
+      if (bm.on) { g1.addColorStop(0, '#FFF6C8'); g1.addColorStop(0.6, C.sunny); g1.addColorStop(1, C.tangerine); }
+      else { g1.addColorStop(0, '#EEF3F5'); g1.addColorStop(1, '#B9C8CE'); }
+      c.fillStyle = g1; circle(c, 0, -6, 16); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, 0, -6, 16); c.stroke();
+      // filament zigzag (dark when off, white-hot when on)
+      c.strokeStyle = bm.on ? '#FFF9EE' : 'rgba(67,52,43,0.45)'; c.lineWidth = 1.8;
+      c.beginPath(); c.moveTo(-6, -3);
+      for (let i = 0; i <= 4; i++) c.lineTo(-6 + i * 3, i % 2 ? -9 : -3);
+      c.stroke();
+      // screw base under the glass
+      c.fillStyle = C.inkSoft; rr(c, -8, 9, 16, 10, 2); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -8, 9, 16, 10, 2); c.stroke();
+      c.strokeStyle = 'rgba(255,249,238,0.5)'; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(-7, 12); c.lineTo(7, 13); c.moveTo(-7, 15); c.lineTo(7, 16); c.stroke();
+      // sparkle charm when lit
+      if (bm.on) { c.fillStyle = C.paper; star4(c, 8, -12, 3.5, 0.2 + t); c.fill(); }
+    },
+
+    lens(c, d, a, o, body) {
+      const lz = body ? body.plugin.lab.lens : { firing: 0, beamLen: 0 };
+      const t = o ? o.t : 0;
+      const firing = lz.firing > 0 && lz.beamLen > 0;
+      // incoming light: a soft ray from the feeding bulb into the lens
+      const fed = body && body.plugin.lab.fedBy;
+      if (fed) {
+        const dx = fed.x - body.position.x, dy = fed.y - body.position.y;
+        const ca = Math.cos(-body.angle), sa = Math.sin(-body.angle);
+        const lx = dx * ca - dy * sa, ly = dx * sa + dy * ca;
+        const g0 = c.createLinearGradient(0, 0, lx, ly);
+        g0.addColorStop(0, 'rgba(255,197,61,0.55)'); g0.addColorStop(1, 'rgba(255,197,61,0)');
+        c.strokeStyle = g0; c.lineWidth = 10; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(0, 0); c.lineTo(lx, ly); c.stroke();
+      }
+      if (firing) drawBeam(c, -d.h / 2, lz.beamLen, t);
+      // mount
+      c.fillStyle = C.woodMid; rr(c, -d.w / 2, d.h / 2 - 7, d.w, 7, 3); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -d.w / 2, d.h / 2 - 7, d.w, 7, 3); c.stroke();
+      // lens glass, edge-on: a wide sparkling ellipse in a deep-blue rim
+      c.fillStyle = C.blueDeep;
+      c.beginPath(); c.ellipse(0, -2, d.w / 2 - 2, 9, 0, 0, TAU); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2;
+      c.beginPath(); c.ellipse(0, -2, d.w / 2 - 2, 9, 0, 0, TAU); c.stroke();
+      const g1 = c.createRadialGradient(-5, -4, 1, 0, -2, 18);
+      g1.addColorStop(0, '#E8F6FD'); g1.addColorStop(0.6, C.sky); g1.addColorStop(1, '#5FA8CC');
+      c.fillStyle = g1;
+      c.beginPath(); c.ellipse(0, -2, d.w / 2 - 6, 6, 0, 0, TAU); c.fill();
+      // glint
+      c.fillStyle = 'rgba(255,249,238,0.85)';
+      c.beginPath(); c.ellipse(-8, -4, 4, 1.8, -0.3, 0, TAU); c.fill();
+      // charge shimmer while focusing
+      if (fed) { c.fillStyle = C.sunny; star4(c, 10, -5, 3 + Math.sin(t * 9) * 0.8, 0.3); c.fill(); }
     },
 
     sparkle(c, d, a, o) {
@@ -1096,6 +1174,8 @@
           if (e.bodyId != null) squash.set(e.bodyId, { t: 0, nx: 0, ny: 1, amt: 0.3 });
           break;
         case 'laser': fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 4); break;
+        case 'bulb_on': fx.ring(e.x, e.y, C.sunny); fx.stars(e.x, e.y - 10, 3); break;
+        case 'bulb_off': fx.poof(e.x, e.y - 10, 3); break;
         case 'win': shakeT = 0; break;
       }
     }
@@ -1461,6 +1541,8 @@
     // back into the scene (the escape hatch for editing a saved puzzle).
     // Sparkles are author-only scenery — never tray pieces.
     if (sandbox && sel.type !== 'sparkle') defsBtns.push({ id: 'pluck', icon: sel._plucked ? '📌' : '🧩', col: C.leaf });
+    // every part explains itself: ? makes Lory describe it
+    defsBtns.push({ id: 'info', icon: '?', col: C.sky });
     defsBtns.push({ id: 'del', icon: '✕', col: C.poppy, gap: 14 * B });
     const pitch = 54 * B;
     let total = defsBtns.length * pitch - 10 * B + 14 * B;
@@ -1485,7 +1567,7 @@
   }
 
   // tray. boost enlarges wells on small screens where the level's tray is
-  // small enough to still fit (the 29-well sandbox stays width-bound).
+  // small enough to still fit (the 31-well sandbox stays width-bound).
   function drawTray(c, tray, o, dragType, boost) {
     const B = boost || 1;
     const y0 = BOARD_H;

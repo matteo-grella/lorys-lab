@@ -96,7 +96,7 @@
   const SANDBOX_TRAY = [
     ['plank', 8], ['shelf', 4], ['wall', 2], ['trampoline', 3], ['seesaw', 2], ['fan', 3],
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
-    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2],
+    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2], ['bulb', 2], ['lens', 2],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
     ['balloon_goal', 4], ['spikes', 2], ['sparkle', 3],
   ];
@@ -545,6 +545,47 @@
     rebuildSim();
     A.sfx('rotate');
   }
+  // What every part does, in Lory's voice — shown by the ? selection button.
+  const PART_INFO = {
+    plank: 'A wooden plank! Tilt it to make ramps and bridges.',
+    shelf: 'A sturdy shelf — things can stand and roll on it.',
+    wall: 'A tall wall. Nothing gets through!',
+    trampoline: 'Boing! Whatever falls on it bounces way up.',
+    seesaw: 'A seesaw! Drop something on one side to fling what sits on the other.',
+    fan: 'It blows a steady wind! Light things fly away — but never my berry.',
+    magnet: 'Bump it awake and it pulls metal marbles. Only marbles!',
+    domino: 'Line up dominoes and tip the first one — click, clack, click!',
+    conveyor: 'A moving belt! It carries things along — flip it with ⇄.',
+    bumper: 'Boing-boing! Everything bounces off it, super hard.',
+    balloon: 'It floats up, up, up! Pointy and hot things pop it.',
+    bucket: 'It catches things and keeps them. No way out!',
+    rope: 'It grabs whatever hangs near its end. Scissors, fire or the laser set it free!',
+    scissors: 'Snip! Touch them and they cut ropes and balloon strings.',
+    candle: 'A little flame! It lights fuses and matches, pops balloons and burns strings. Water blows it out — tap 🔥/💨 to start it lit or cold.',
+    match: 'Bump it and it strikes a big flame — just for a moment, then it is spent!',
+    fuse: 'Fire crawls along it — a slow-burning path for your flame.',
+    hydrant: 'Bump it and it sprays water! Water pushes things and puts out fire.',
+    switch: 'A pressure plate! It powers the nearest machine while something sits on it.',
+    fist: 'A spring-loaded punch! Touch the glove — or press the button on its back to fire it like a cannon.',
+    laser: 'PEW! Touch it and the beam pops balloons, lights fires and cuts strings. Walls block it.',
+    bulb: 'Press its button to switch the light on and off — ⇄ moves the button. Shine it into a lens!',
+    lens: 'It focuses light! Put it near a glowing bulb and out comes a laser beam.',
+    ball_beach: 'A light, bouncy beach ball — the wind loves it.',
+    ball_marble: 'A heavy metal marble. Magnets love it!',
+    berry: 'My berry! Roll it into my bowl to feed me!',
+    bowl: 'My bowl! A berry that lands here feeds me. Yum!',
+    bell: 'Ring it with a good bump! Ding!',
+    balloon_goal: 'A tied balloon. Cut or burn its string and up it goes!',
+    spikes: 'A prickly cactus! Balloons that touch it go POP.',
+    sparkle: 'A bonus star! Whoever plays your puzzle grabs it by passing through.',
+  };
+  function showPartInfo() {
+    const p = S.placements[S.selection];
+    if (!p) return;
+    A.sfx('button');
+    setLory('think', PART_INFO[p.type] || 'A mysterious part!', 8);
+  }
+
   function toggleLitSelection() {
     const p = S.placements[S.selection];
     if (!p || p.type !== 'candle') return;
@@ -1098,6 +1139,7 @@
         if (b.id === 'flip') flipSelection();
         if (b.id === 'lit') toggleLitSelection();
         if (b.id === 'pluck') togglePluckSelection();
+        if (b.id === 'info') showPartInfo();
         if (b.id === 'del') { A.sfx('pickup'); removePlacement(S.selection); }
         return;
       }
