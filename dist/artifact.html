@@ -5472,7 +5472,9 @@
       const a = partAnim(m.id);
       if (!a.trail) a.trail = [];
       const speed = Math.hypot(body.velocity.x, body.velocity.y);
-      if (juicy && running && speed > JUICE_MIN_SPEED) {
+      // a swallowed ball keeps its capture-time velocity but goes nowhere —
+      // fall through to the else so its ribbon fades instead of pinning
+      if (juicy && running && speed > JUICE_MIN_SPEED && !m.swallowed) {
         a.trail.push({ x: body.position.x, y: body.position.y, v: speed });
         if (a.trail.length > 6) a.trail.shift();
         // dust puffs while rolling along a surface (moving but not falling)
@@ -5552,7 +5554,9 @@
     const spec = p.spec, type = spec.type;
     const body = p.bodies[0];
     const m = body.plugin.lab;
-    if (m.popped || m.collected) return;
+    // swallowed: sitting inside a cannon (body out of the world, frozen at
+    // its capture spot) — invisible until the cannon fires it back out
+    if (m.popped || m.collected || m.swallowed) return;
     const a = anim.get(m.id);
 
     // seesaw base behind the plank, at the constraint anchor
