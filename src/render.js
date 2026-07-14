@@ -1767,9 +1767,14 @@
     return { wells, arrows, pages, page };
   }
 
-  // speech bubble
-  function drawBubble(c, x, y, text, o) {
+  // speech bubble. opts.fade (0..1) dissolves it as the say-timer runs out;
+  // opts.close draws a toy ✕ on the top-right corner and returns its
+  // hit-region (same coordinate space the bubble was drawn in).
+  function drawBubble(c, x, y, text, o, opts) {
+    opts = opts || {};
+    const B = opts.boost || 1;
     c.save();
+    if (opts.fade != null) c.globalAlpha = clamp(opts.fade, 0, 1);
     c.font = '700 16px ui-rounded, system-ui, sans-serif';
     const words = String(text).split(' ');
     const lines = [];
@@ -1789,7 +1794,20 @@
     rr(c, bx, by, bw, bh, 14); c.stroke();
     c.fillStyle = C.ink; c.textAlign = 'left'; c.textBaseline = 'top';
     lines.forEach((l, i) => c.fillText(l, bx + 14, by + 11 + i * 21));
+    let closeBtn = null;
+    if (opts.close) { // toy button, riding the corner (same look as ✕ delete)
+      const r = 12 * Math.min(B, 1.4), cxb = bx + bw - 4, cyb = by + 4;
+      c.fillStyle = '#B93A28'; circle(c, cxb, cyb + 2, r); c.fill();
+      c.fillStyle = C.poppy; circle(c, cxb, cyb, r); c.fill();
+      c.strokeStyle = C.paper; c.lineWidth = 3; c.lineCap = 'round';
+      const k = r * 0.4;
+      c.beginPath(); c.moveTo(cxb - k, cyb - k); c.lineTo(cxb + k, cyb + k);
+      c.moveTo(cxb + k, cyb - k); c.lineTo(cxb - k, cyb + k); c.stroke();
+      // generous tap target (little fingers), independent of the visual size
+      closeBtn = { x: cxb, y: cyb, r: Math.max(22 * B, r + 8) };
+    }
     c.restore();
+    return closeBtn;
   }
 
   // ---------------------------------------------------------------------------
@@ -1816,13 +1834,12 @@
 
     const o = { t, running };
 
-    // Lory + bubble (behind parts)
+    // Lory (behind parts — her bubble is drawn LAST, on top of everything)
     if (lory) {
       ctx.save();
       ctx.translate(lory.x - 50, lory.y - 96);
       drawLory(ctx, lory.pose, t);
       ctx.restore();
-      if (lory.say) drawBubble(ctx, lory.x + 40, lory.y - 100, lory.say, o);
     }
 
     drawWindZones(ctx, sim, o, !running);
@@ -1851,6 +1868,16 @@
 
     drawParticles(ctx);
 
+    // Lory's message rides on top of EVERYTHING on the board — machines must
+    // never cover what the bird is saying. ✕ dismisses it early; the
+    // say-timer dissolves it (fade over the last 0.4s).
+    let bubbleClose = null;
+    if (lory && lory.say) {
+      const fade = lory.sayTimer != null && lory.sayTimer < 0.4 ? lory.sayTimer / 0.4 : 1;
+      bubbleClose = drawBubble(ctx, lory.x + 40, lory.y - 100, lory.say, o,
+        { boost: frame.uiBoost, close: true, fade });
+    }
+
     ctx.restore(); // end camera — tray below is fixed to the screen
 
     // tray
@@ -1861,7 +1888,7 @@
       wells = trayOut.wells;
     }
 
-    return { selButtons, wells, trayArrows: trayOut ? trayOut.arrows : [], trayPages: trayOut ? trayOut.pages : 1, trayPage: trayOut ? trayOut.page : 0 };
+    return { selButtons, wells, bubbleClose, trayArrows: trayOut ? trayOut.arrows : [], trayPages: trayOut ? trayOut.pages : 1, trayPage: trayOut ? trayOut.page : 0 };
   }
 
   function init(canvas) {

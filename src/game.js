@@ -1130,6 +1130,18 @@
     }
     if (pinch) return;
 
+    // Lory's bubble is drawn topmost, so its ✕ wins the tap — and works in
+    // every phase: kids shouldn't have to wait out the say-timer mid-run
+    if (S.bubbleClose && S.lory.say) {
+      const bp = toBoard(pt);
+      if (Math.hypot(bp.x - S.bubbleClose.x, bp.y - S.bubbleClose.y) <= S.bubbleClose.r) {
+        S.lory.say = null; S.lory.sayTimer = 0;
+        if (S.lory.pose !== 'cheer') S.lory.pose = 'idle';
+        A.sfx('button');
+        return;
+      }
+    }
+
     if (S.phase === 'run' || S.phase === 'won') return;
     if (S.drag) return; // one drag at a time: a second finger must not steal it
 
@@ -1376,6 +1388,7 @@
       cam,
     });
     S.selButtons = out.selButtons || [];
+    S.bubbleClose = out.bubbleClose || null;
     S.wells = out.wells || [];
     S.trayArrows = out.trayArrows || [];
     S.trayPages = out.trayPages || 1;

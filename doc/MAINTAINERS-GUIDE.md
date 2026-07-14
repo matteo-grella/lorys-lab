@@ -141,7 +141,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | core | game | `createSim(levelDef, placements)` → sim object; `sim.step()` → events array; `sim.state` flags; `PART_DEFS`; `placementOverlaps(sim, spec)`; `simulate(levelDef, placements, opts)` (headless); `puzzleCode.{encode,decode,canonical}` (puzzle sharing, async) |
 | core | render | each Matter body carries `body.plugin.lab` metadata (`type,id,w,h,r,dir,spec,...`); event objects for FX |
 | core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off, laser, bulb_on/off, fan_on/off, cannon_load, cannon_fire, cannon_dud` |
-| render | game | `R.draw(frame)` returns `{selButtons, wells}` hit-regions the input code uses next frame |
+| render | game | `R.draw(frame)` returns `{selButtons, wells, bubbleClose}` hit-regions the input code uses next frame |
 | levels | game/tests | array of level objects (schema in §5) |
 
 ---
@@ -701,7 +701,15 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   `cheer` (6Hz hops + stretch), `oops` (squash + droop). Also used on the
   title screen, win overlay and the PWA icons via separate canvases.
   Construction spec: design/visual-spec.md §2; UX role: manual §5.1.
-- **Speech bubble**: `drawBubble` — wraps text at ~230 px.
+- **Speech bubble**: `drawBubble(c, x, y, text, o, {boost, close, fade})` —
+  wraps text at ~230 px. Drawn LAST on the board (top z-order: machines must
+  never cover what Lory says). `close: true` adds a toy ✕ on the top-right
+  corner and returns its hit-circle (`{x, y, r: 22*boost}` — visual r is
+  smaller, the tap target is kid-sized); game.js stores it as
+  `S.bubbleClose` and hit-tests it FIRST on pointerdown, in EVERY phase
+  (dismiss = `say/sayTimer` cleared). `fade` (0..1) dissolves the bubble —
+  draw() feeds it `sayTimer / 0.4` so the auto-dissolve is a real fade-out,
+  not a blink.
 - **Ghosts**: `drawGhost(ctx, spec, o, {style:'hint'})` = pulsing blue dashed
   outline + faded part (the hint system); drag ghosts use
   `{invalid, lift}` (red ✕ overlay when placement is illegal).
@@ -727,11 +735,11 @@ All art is drawn per-frame with Canvas 2D; nothing is loaded. Structure:
   Campaign trays are small enough that nothing changes for them.
 - **`draw(frame)`** is the single entry point; frame =
   `{sim, running, t, dt, selection, dragGhost, hints, tray, lory, uiBoost, cam}`;
-  returns `{selButtons, wells}` for input hit-testing.
+  returns `{selButtons, wells, bubbleClose}` for input hit-testing.
 
-Draw order: background → Lory+bubble → wind zones → static parts → dynamic
+Draw order: background → Lory → wind zones → static parts → dynamic
 parts → sensors (sparkles on top) → hint ghosts → selection → drag ghost →
-particles → tray.
+particles → speech bubble (always on top) → tray.
 
 ---
 
