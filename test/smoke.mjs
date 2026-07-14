@@ -884,6 +884,50 @@ function run(level, placements, seconds = 12, watch = null) {
   check('75° lob drops the berry into the bowl — Lory is fed', r.won, `t=${r.t}s`);
 }
 
+// 42. One shot each: burnout (shot or dud) spends the cannon for good — the
+//     fuse never relights, the lid stays down, nothing more is swallowed.
+//     Kills the candle-parked infinite auto-cannon: the world SETTLES.
+{
+  const sim = Core.createSim({
+    goalType: 'bell',
+    fixed: [
+      { type: 'cannon', x: 300, y: 659, angle: 45 },
+      { type: 'candle', x: 246, y: 661 },          // parked flame at the breech
+      { type: 'berry', x: 282, y: 560 },           // loads + fires (~1.3s)
+      { type: 'berry', x: 282, y: -2000 },         // arrives AFTER the shot
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, []);
+  const evs = [];
+  for (let f = 0; f < 720; f++) for (const e of sim.step()) evs.push(e.type);
+  const n = t => evs.filter(e => e === t).length;
+  const cm = sim.parts.find(p => p.spec.type === 'cannon').bodies[0].plugin.lab.cannon;
+  const berries = sim.bodies().filter(b => b.plugin.lab && b.plugin.lab.type === 'berry');
+  check('fired cannon is spent: one ignite, one shot, no duds, no relight',
+    n('ignite') === 1 && n('cannon_fire') === 1 && n('cannon_dud') === 0,
+    `ignite=${n('ignite')} fire=${n('cannon_fire')} dud=${n('cannon_dud')}`);
+  check('spent cannon swallows nothing: the late berry stays outside',
+    cm.dead && !cm.loaded && berries.length === 2, `berriesInWorld=${berries.length}`);
+  check('parked candle no longer loops the machine: the world settles',
+    sim.state.settled);
+
+  const dud = Core.createSim({
+    goalType: 'bell',
+    fixed: [
+      { type: 'cannon', x: 300, y: 659, angle: 45 },
+      { type: 'candle', x: 246, y: 661 },
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, []);
+  const evs2 = [];
+  for (let f = 0; f < 600; f++) for (const e of dud.step()) evs2.push(e.type);
+  const n2 = t => evs2.filter(e => e === t).length;
+  const cm2 = dud.parts.find(p => p.spec.type === 'cannon').bodies[0].plugin.lab.cannon;
+  check('a dud also spends it: one ignite, one poof, then quiet for good',
+    n2('ignite') === 1 && n2('cannon_dud') === 1 && cm2.dead && dud.state.settled,
+    `ignite=${n2('ignite')} dud=${n2('cannon_dud')} settled=${dud.state.settled}`);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

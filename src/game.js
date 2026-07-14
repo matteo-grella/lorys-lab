@@ -579,7 +579,7 @@
     laser: 'PEW! Touch it and the beam pops balloons, lights fires and cuts strings. Walls block it.',
     bulb: 'Press its button to switch the light on and off — ⇄ moves the button. Shine it into a lens!',
     lens: 'It focuses light! Put it near a glowing bulb and out comes a laser beam.',
-    cannon: 'Drop a ball in the top hatch — the door snaps shut! Light the back fuse with any flame and BOOM! ⟲⟳ aims the barrel, ⇄ turns it around.',
+    cannon: 'Drop a ball in the top hatch — the door snaps shut! Light the back fuse with any flame and BOOM — one shot each, so make it count! ⟲⟳ aims the barrel, ⇄ turns it around.',
     ball_beach: 'A light, bouncy beach ball — the wind loves it.',
     ball_marble: 'A heavy metal marble. Magnets love it!',
     berry: 'My berry! Roll it into my bowl to feed me!',

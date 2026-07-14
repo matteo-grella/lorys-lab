@@ -928,7 +928,7 @@
       // top-back (OPEN = hungry, SHUT = loaded & ready), breech fuse at the
       // back. Geometry mirrors core.js: pivot (10,-10), barrel length 46.
       const cm = body ? body.plugin.lab.cannon
-        : { loaded: false, fuseLit: false, fuseT: 0, cooldown: 0, doorAnim: 0, fireAnim: 0 };
+        : { loaded: false, fuseLit: false, fuseT: 0, cooldown: 0, dead: false, doorAnim: 0, fireAnim: 0 };
       const t = o ? o.t : 0;
       const elev = clamp(d.elev == null ? 45 : d.elev, 0, 75) * Math.PI / 180;
       const hw = d.w / 2, hh = d.h / 2;
@@ -949,10 +949,12 @@
       c.fillStyle = C.sunny; star4(c, 26, 6, 6, 0.2); c.fill();
       // loading hatch: dark mouth + a chunky trapdoor lid hinged at the back
       // edge. OPEN = flipped back over the breech (hungry), SHUT = lying
-      // proud on top with its knob up (loaded & ready). doorAnim (10->0)
-      // tweens toward the current resting pose, so loading reads as a slam.
+      // proud on top with its knob up (loaded & ready — or spent for good:
+      // a dead cannon keeps its lid down forever). doorAnim (10->0) tweens
+      // toward the current resting pose, so loading reads as a slam.
       const k = clamp(cm.doorAnim / 10, 0, 1);
-      const lidA = cm.loaded ? -2.0 * k : -2.0 * (1 - k);
+      const shut = cm.loaded || cm.dead;
+      const lidA = shut ? -2.0 * k : -2.0 * (1 - k);
       if (lidA < -0.1) { // the mouth, visible while the lid is open(ing)
         c.fillStyle = 'rgba(46,35,27,0.75)';
         rr(c, -38, -hh, 40, 7, 3.5); c.fill();
@@ -992,12 +994,15 @@
       // swivel bolt over the barrel: reads as the mount
       c.fillStyle = C.sunny; circle(c, 10, -10, 5.5); c.fill();
       c.strokeStyle = C.outline; c.lineWidth = 1.5; circle(c, 10, -10, 5.5); c.stroke();
-      // breech fuse: cord curling out of the touch-hole at the top-back
+      // breech fuse: cord curling out of the touch-hole at the top-back —
+      // or, once spent, a permanent charred stub (this cannon is done)
       const fx0 = -hw - 8, fy0 = -hh + 8;
-      for (const [col, lw] of [[C.woodDark, 4], [C.tangerine, 1.6]]) {
-        c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
-        c.beginPath(); c.moveTo(-hw + 3, -hh + 12);
-        c.quadraticCurveTo(-hw - 8, -hh + 16, fx0, fy0); c.stroke();
+      if (!cm.dead) {
+        for (const [col, lw] of [[C.woodDark, 4], [C.tangerine, 1.6]]) {
+          c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
+          c.beginPath(); c.moveTo(-hw + 3, -hh + 12);
+          c.quadraticCurveTo(-hw - 8, -hh + 16, fx0, fy0); c.stroke();
+        }
       }
       if (cm.fuseLit) { // sizzling spark — same language as the fuse part
         const tw = 0.7 + 0.3 * Math.sin(t * 30);
@@ -1006,11 +1011,15 @@
         c.fillStyle = g3; circle(c, fx0, fy0, 16); c.fill();
         c.fillStyle = `rgba(255,197,61,${tw})`; star4(c, fx0, fy0, 9, t * 6); c.fill();
         c.fillStyle = '#FFF3B0'; circle(c, fx0, fy0, 3); c.fill();
-      } else if (cm.cooldown > 0) { // just fired: charred tip + smoke wisp
-        c.fillStyle = 'rgba(67,52,43,0.55)'; circle(c, fx0, fy0, 3); c.fill();
-        c.strokeStyle = 'rgba(140,122,107,0.6)'; c.lineWidth = 2;
-        c.beginPath(); c.moveTo(fx0, fy0 - 3);
-        c.quadraticCurveTo(fx0 + 4, fy0 - 10, fx0 + 1, fy0 - 16); c.stroke();
+      } else if (cm.dead) { // spent: charred stub, smoke only right after
+        c.strokeStyle = 'rgba(67,52,43,0.55)'; c.lineWidth = 4; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(-hw + 3, -hh + 12);
+        c.quadraticCurveTo(-hw - 4, -hh + 13, -hw - 5, -hh + 10); c.stroke();
+        if (cm.cooldown > 0) {
+          c.strokeStyle = 'rgba(140,122,107,0.6)'; c.lineWidth = 2;
+          c.beginPath(); c.moveTo(-hw - 5, -hh + 7);
+          c.quadraticCurveTo(-hw - 1, -hh, -hw - 4, -hh - 6); c.stroke();
+        }
       }
       c.restore();
     },

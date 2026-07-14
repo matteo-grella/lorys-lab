@@ -287,11 +287,13 @@
         // Toy cannon. A roller that drops onto the open top hatch is
         // swallowed and the door snaps shut (closed door = loaded & ready);
         // any flame or beam on the breech fuse fires it CANNON_FUSE_FRAMES
-        // later. spec.angle is barrel ELEVATION (render + launch vector
-        // only), deliberately NOT applied to the body: the hatch must stay
-        // on top at every aim.
+        // later. ONE SHOT EACH: once the fuse burns down (shot or dud) the
+        // cannon is dead — it never relights and never swallows again, so a
+        // parked candle can't make an infinite auto-cannon. spec.angle is
+        // barrel ELEVATION (render + launch vector only), deliberately NOT
+        // applied to the body: the hatch must stay on top at every aim.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.15 }),
-          { cannon: { loaded: false, ball: null, fuseLit: false, fuseT: 0, cooldown: 0, doorAnim: 0, fireAnim: 0 } }));
+          { cannon: { loaded: false, ball: null, fuseLit: false, fuseT: 0, cooldown: 0, dead: false, doorAnim: 0, fireAnim: 0 } }));
         break;
 
       case 'domino':
@@ -711,7 +713,7 @@
     };
     function lightCannon(body) {
       const cm = lab(body).cannon;
-      if (cm.fuseLit || cm.cooldown > 0) return;
+      if (cm.fuseLit || cm.dead) return; // spent cannons never relight
       cm.fuseLit = true; cm.fuseT = CANNON_FUSE_FRAMES;
       const tip = cannonFuseTip(body);
       state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
@@ -948,7 +950,9 @@
             const cm = lab(q.bodies[0]).cannon;
             const tip = cannonFuseTip(q.bodies[0]);
             if (cm.fuseLit && rectContains(region, tip)) {
-              cm.fuseLit = false; // endless cord: relightable once dry
+              // doused mid-burn: the cord never burned down, so it can be
+              // relit — the cannon only dies at burnout (shot or dud)
+              cm.fuseLit = false;
               state.events.push({ type: 'extinguish', x: tip.x, y: tip.y });
             }
           }
@@ -1209,7 +1213,7 @@
         if (cm.doorAnim > 0) cm.doorAnim--;
         if (cm.fireAnim > 0) cm.fireAnim--;
         const s = cannonSide(m);
-        if (!cm.loaded) {
+        if (!cm.loaded && !cm.dead) { // a spent cannon never swallows again
           for (const b of all) {
             if (b.isStatic || b.isSensor || !b.circleRadius) continue;
             const mb = lab(b);
@@ -1230,7 +1234,10 @@
         if (!cm.fuseLit) continue;
         cm.fuseT--;
         if (cm.fuseT > 0) continue;
+        // burnout: one shot each — dead either way (cooldown is only the
+        // renderer's smoke-wisp window now)
         cm.fuseLit = false;
+        cm.dead = true;
         cm.cooldown = CANNON_COOLDOWN_FRAMES;
         const mz = cannonMuzzle(cb);
         if (cm.loaded && cm.ball) {
@@ -1241,9 +1248,10 @@
           Body.setVelocity(ball, { x: ux * CANNON_LAUNCH, y: uy * CANNON_LAUNCH });
           Body.setAngularVelocity(ball, 0);
           Composite.add(world, ball);
-          cm.loaded = false; cm.ball = null; cm.doorAnim = 10; cm.fireAnim = 14;
+          cm.loaded = false; cm.ball = null; cm.fireAnim = 14; // door stays shut: spent
           state.events.push({ type: 'cannon_fire', x: mz.x, y: mz.y, bodyId: ball.id, partId: m.id });
         } else {
+          cm.doorAnim = 10; // the empty dud closes its lid for good
           state.events.push({ type: 'cannon_dud', x: mz.x, y: mz.y, partId: m.id });
         }
       }

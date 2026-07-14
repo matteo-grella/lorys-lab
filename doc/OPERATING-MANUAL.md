@@ -76,7 +76,7 @@ lists go in the part's guide table row.
 - **always-on with optional initial state** (`spec.on !== false`): fan
 
 ### 1.4 State vocabulary
-- one-shot & spent (match) · timed burst (hydrant, magnet, laser)
+- one-shot & spent (match, cannon) · timed burst (hydrant, magnet, laser)
 - toggle (bulb) · powered-while (all switch loads)
 - **author-settable initial state**: candle `lit`, fan `on`. ⚠️ Each such
   boolean consumes one wire-format "extra" slot and parts have AT MOST TWO,

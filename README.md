@@ -30,7 +30,7 @@ self-contained file.
   and douses flames), pressure switches that power fans/belts/magnets through
   a visible wire, a spring-loaded boxing fist, and a fuse-fired cannon —
   drop a ball in the top hatch (the door snaps shut), light the fuse with
-  any flame or beam, BOOM. Every behavior and
+  any flame or beam, BOOM — one shot each. Every behavior and
   interaction is proven by the headless physics suite.
 - **Puzzle maker**: build a scene in the sandbox, press 🧩, tap the parts the
   player should place (they fade into the future tray), press 💾 and name it.
