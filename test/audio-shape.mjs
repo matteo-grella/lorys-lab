@@ -43,6 +43,9 @@ A.handleEvents([
   { type: 'win' },
   { type: 'magnet_on' },
   { type: 'magnet_off' },
+  { type: 'cannon_load' },
+  { type: 'cannon_fire' },
+  { type: 'cannon_dud' },
   { type: 'unknown_event' },
   null,
 ]);

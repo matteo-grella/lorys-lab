@@ -754,6 +754,136 @@ function run(level, placements, seconds = 12, watch = null) {
     berry.position.y > 500 && berry.position.y < 540, 'y=' + Math.round(berry.position.y));
 }
 
+// 39. Cannon happy path: a roller falling on the open hatch loads it (door
+//     shuts), a candle flame on the breech fuse fires it along the barrel;
+//     dir mirrors the shot and elevation shapes the arc.
+{
+  const mk = (angle, dir, bx) => ({
+    goalType: 'bell',
+    fixed: [
+      { type: 'cannon', x: 300, y: 659, angle, dir },
+      { type: 'berry', x: bx, y: 560 },                 // falls into the hatch
+      { type: 'candle', x: dir === 'left' ? 354 : 246, y: 661 }, // lit, at the breech
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  });
+  const fly = (angle, dir) => {
+    const sim = Core.createSim(mk(angle, dir, dir === 'left' ? 318 : 282), []);
+    const berry = sim.parts.find(p => p.spec.type === 'berry').bodies[0];
+    const evs = [];
+    let minY = 1e9, maxX = -1e9, minX = 1e9, fired = false;
+    for (let f = 0; f < 360; f++) {
+      for (const e of sim.step()) evs.push(e.type);
+      if (evs.includes('cannon_fire')) fired = true;
+      if (fired) {
+        minY = Math.min(minY, berry.position.y);
+        maxX = Math.max(maxX, berry.position.x);
+        minX = Math.min(minX, berry.position.x);
+      }
+    }
+    return { evs, minY, maxX, minX };
+  };
+  const r45 = fly(45);
+  check('cannon loads a falling berry then a candle-lit fuse fires it',
+    r45.evs.includes('cannon_load') && r45.evs.includes('ignite') && r45.evs.includes('cannon_fire'),
+    r45.evs.filter(e => e.startsWith('cannon') || e === 'ignite').slice(0, 3).join(','));
+  check('45° right shot flies high and far right', r45.minY < 450 && r45.maxX > 900,
+    `peak y=${Math.round(r45.minY)} maxX=${Math.round(r45.maxX)}`);
+  const rL = fly(45, 'left');
+  check('dir:left mirrors the shot', rL.evs.includes('cannon_fire') && rL.minX < 120,
+    `minX=${Math.round(rL.minX)}`);
+  const r15 = fly(15), r75 = fly(75);
+  check('elevation shapes the arc: 75° flies higher, 15° flies farther',
+    r75.minY < r15.minY - 150 && r15.maxX > r75.maxX,
+    `peak75=${Math.round(r75.minY)} peak15=${Math.round(r15.minY)} maxX15=${Math.round(r15.maxX)} maxX75=${Math.round(r75.maxX)}`);
+}
+
+// 40. Cannon doesn't do what it shouldn't: unlit it just holds its ball and
+//     settles; the shut door turns a second ball away; water on the sizzling
+//     fuse stops the shot; an empty cannon coughs a harmless dud.
+{
+  const unlit = Core.simulate({
+    goalType: 'bell',
+    fixed: [
+      { type: 'cannon', x: 300, y: 659, angle: 45 },
+      { type: 'ball_marble', x: 282, y: 560 },
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, [], { maxSeconds: 8, collectEvents: true });
+  check('unlit cannon holds its ball and settles (pending nothing)',
+    unlit.settled && unlit.events.some(e => e.type === 'cannon_load')
+    && !unlit.events.some(e => e.type === 'cannon_fire'), `t=${unlit.seconds}s`);
+
+  const sim2 = Core.createSim({
+    goalType: 'bell',
+    fixed: [
+      { type: 'cannon', x: 300, y: 659, angle: 45 },
+      { type: 'ball_marble', x: 282, y: 560 },
+      { type: 'ball_marble', x: 282, y: 460 },   // arrives at a shut door
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, []);
+  for (let f = 0; f < 360; f++) sim2.step();
+  const cm2 = sim2.parts.find(p => p.spec.type === 'cannon').bodies[0].plugin.lab.cannon;
+  const out = sim2.bodies().filter(b => b.plugin.lab && b.plugin.lab.type === 'ball_marble');
+  check('shut door: second marble bounces off and stays outside',
+    cm2.loaded && out.length === 1, `outside=${out.length}`);
+
+  const dous = Core.simulate({
+    goalType: 'bell',
+    fixed: [
+      { type: 'cannon', x: 500, y: 659, angle: 45 },
+      { type: 'ball_marble', x: 482, y: 560 },
+      { type: 'candle', x: 446, y: 661 },        // lights the breech fuse...
+      { type: 'hydrant', x: 300, y: 659 },       // ...and the hydrant kills it
+      { type: 'ball_beach', x: 300, y: 560 },    // bump wakes the hydrant
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, [], { maxSeconds: 8, collectEvents: true });
+  check('hydrant water douses the lit cannon fuse — no shot',
+    dous.events.some(e => e.type === 'ignite') && dous.events.some(e => e.type === 'extinguish')
+    && !dous.events.some(e => e.type === 'cannon_fire'));
+
+  const dud = Core.simulate({
+    goalType: 'bell',
+    fixed: [
+      { type: 'cannon', x: 300, y: 659, angle: 45 },
+      { type: 'candle', x: 246, y: 661 },
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, [], { maxSeconds: 4, collectEvents: true });
+  check('empty cannon duds (visible poof, nothing fired)',
+    dud.events.some(e => e.type === 'cannon_dud') && !dud.events.some(e => e.type === 'cannon_fire'));
+}
+
+// 41. Cannon cross-part chains: the laser beam lights the breech fuse from
+//     afar, and a 75° lob drops the berry straight into Lory's bowl.
+{
+  const lz = Core.simulate({
+    goalType: 'bell',
+    fixed: [
+      { type: 'laser', x: 100, y: 636, angle: 90 },  // beam fires to the right
+      { type: 'ball_marble', x: 100, y: 560 },       // falls on it -> PEW
+      { type: 'cannon', x: 400, y: 659, angle: 45 },
+      { type: 'berry', x: 382, y: 600 },
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, [], { maxSeconds: 6, collectEvents: true });
+  check('laser beam lights the cannon fuse from across the room',
+    lz.events.some(e => e.type === 'laser') && lz.events.some(e => e.type === 'cannon_fire'));
+
+  const r = run({
+    goalType: 'catch',
+    fixed: [
+      { type: 'cannon', x: 300, y: 659, angle: 75 },
+      { type: 'berry', x: 282, y: 600 },
+      { type: 'candle', x: 246, y: 661 },
+      { type: 'bowl', x: 705, y: 640 },
+    ],
+  }, [], 12);
+  check('75° lob drops the berry into the bowl — Lory is fed', r.won, `t=${r.t}s`);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

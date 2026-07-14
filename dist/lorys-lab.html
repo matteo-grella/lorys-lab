@@ -277,6 +277,11 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     laser:       { w: 44,  h: 56,  static: true,  placeable: true, rot: true },
     bulb:        { w: 44,  h: 58,  static: true,  placeable: true, dir: ['right', 'left', 'up'] },
     lens:        { w: 46,  h: 26,  static: true,  placeable: true, rot: true },
+    // the first part with BOTH orientation extras (the wire format holds
+    // exactly two, one of each kind): dir mirrors the cannon, `angle` is the
+    // BARREL ELEVATION 0–75° — the body itself never rotates, so the loading
+    // hatch on top keeps working at every aim
+    cannon:      { w: 92,  h: 62,  static: true,  placeable: true, rot: true, dir: ['right', 'left'] },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -300,7 +305,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     balloon: 'balloon', balloon_goal: 'balloon', bell: 'bell', bowl: 'wood', spikes: 'wood',
     rope: 'wood', scissors: 'magnet', candle: 'wood', fuse: 'wood',
     hydrant: 'magnet', switch: 'wood', fist: 'bumper', match: 'wood', laser: 'magnet',
-    bulb: 'magnet', lens: 'magnet',
+    bulb: 'magnet', lens: 'magnet', cannon: 'magnet',
   };
 
   const FAN_REACH = 280;
@@ -327,6 +332,11 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   const BULB_BUTTON_COOLDOWN = 20;  // absorbs one landing's contact rattle,
                                     // short enough that a re-bounce re-presses
   const LENS_REACH = 220;           // how close a lit bulb must be to feed a lens
+  const CANNON_LAUNCH = 17;         // muzzle speed (px/frame), a touch over the fist's 15
+  const CANNON_FUSE_FRAMES = 80;    // breech fuse sizzles ~1.3s of anticipation, then BOOM
+  const CANNON_COOLDOWN_FRAMES = 60;// re-arm time before the fuse can be lit again
+  const CANNON_MOUTH_HW = 20;       // half-width of the loading-hatch capture zone
+  const CANNON_ELEV_MAX = 75;       // barrel elevation clamp (editor + hostile codes)
 
   let nextId = 1;
 
@@ -508,6 +518,17 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         // the laser cannon along its local "up".
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.1 }),
           { lens: { firing: 0, beamLen: 0 } }));
+        break;
+
+      case 'cannon':
+        // Toy cannon. A roller that drops onto the open top hatch is
+        // swallowed and the door snaps shut (closed door = loaded & ready);
+        // any flame or beam on the breech fuse fires it CANNON_FUSE_FRAMES
+        // later. spec.angle is barrel ELEVATION (render + launch vector
+        // only), deliberately NOT applied to the body: the hatch must stay
+        // on top at every aim.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.15 }),
+          { cannon: { loaded: false, ball: null, fuseLit: false, fuseT: 0, cooldown: 0, doorAnim: 0, fireAnim: 0 } }));
         break;
 
       case 'domino':
@@ -911,6 +932,27 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       const head = matchHead(body, m.h);
       state.events.push({ type: 'ignite', x: head.x, y: head.y });
     }
+    // cannon geometry: the body never rotates, so everything is axis-aligned
+    // math off dir (side) and spec.angle (barrel elevation, clamped)
+    const cannonSide = (m) => m.dir === 'left' ? -1 : 1;
+    const cannonElev = (m) => Math.max(0, Math.min(CANNON_ELEV_MAX, m.spec.angle || 0)) * Math.PI / 180;
+    // touch-hole at the TOP of the back face: reachable by a candle standing
+    // on the same floor as the cannon (flame tips sit high)
+    const cannonFuseTip = (body) => {
+      const m = lab(body);
+      return { x: body.position.x - cannonSide(m) * (m.w / 2 + 8), y: body.position.y - m.h / 2 + 8 };
+    };
+    const cannonMuzzle = (body) => {
+      const m = lab(body), s = cannonSide(m), e = cannonElev(m);
+      return { x: body.position.x + s * (10 + Math.cos(e) * 46), y: body.position.y - 10 - Math.sin(e) * 46 };
+    };
+    function lightCannon(body) {
+      const cm = lab(body).cannon;
+      if (cm.fuseLit || cm.cooldown > 0) return;
+      cm.fuseLit = true; cm.fuseT = CANNON_FUSE_FRAMES;
+      const tip = cannonFuseTip(body);
+      state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
+    }
     function ropeEnds(p) {
       const anchor = p.bodies[0], m = lab(anchor);
       if (!m.rope.attached) return null;
@@ -1139,6 +1181,13 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
                 break;
               }
             }
+          } else if (q.spec.type === 'cannon') {
+            const cm = lab(q.bodies[0]).cannon;
+            const tip = cannonFuseTip(q.bodies[0]);
+            if (cm.fuseLit && rectContains(region, tip)) {
+              cm.fuseLit = false; // endless cord: relightable once dry
+              state.events.push({ type: 'extinguish', x: tip.x, y: tip.y });
+            }
           }
         }
       }
@@ -1208,6 +1257,12 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
             const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
             if (!mm.lit && !mm.dead && Math.hypot(head.x - f.x, head.y - f.y) < FLAME_R * 1.3)
               strikeMatch(q.bodies[0]);
+          } else if (q.spec.type === 'cannon') {
+            // deliberately one-way: the cannon's sizzling breech fuse is
+            // never itself a flame point (it fires the cannon, nothing else)
+            const tip = cannonFuseTip(q.bodies[0]);
+            if (Math.hypot(tip.x - f.x, tip.y - f.y) < FLAME_R * 1.3)
+              lightCannon(q.bodies[0]);
           } else if (q.spec.type === 'rope') {
             const ends = ropeEnds(q);
             if (ends && distPointSeg(f, ends[0], ends[1]) < 14) cutRope(q, f.x, f.y, 'fire');
@@ -1285,6 +1340,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
             const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
             if (!mm.lit && !mm.dead && distPointSeg(head, mz, end) < 20)
               strikeMatch(q.bodies[0]);
+          } else if (q.spec.type === 'cannon') {
+            const tip = cannonFuseTip(q.bodies[0]);
+            if (distPointSeg(tip, mz, end) < 20) lightCannon(q.bodies[0]);
           } else if (q.spec.type === 'fuse') {
             const qb = q.bodies[0], fm = lab(qb).fuse;
             if (fm.dead) continue;
@@ -1374,6 +1432,58 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         const fm = lab(p.bodies[0]).fist;
         if (fm.cooldown > 0) fm.cooldown--;
       }
+
+      // Cannons. Loading: a roller (any dynamic circle that isn't buoyant or
+      // poppable — beach ball, marble, berry) whose center drops into the
+      // hatch zone above the top face is swallowed; the door snaps shut
+      // (closed door = loaded & ready — the visual cue). Firing: when the lit
+      // breech fuse burns down, the stored ball reappears at the muzzle with
+      // CANNON_LAUNCH speed along the barrel; empty cannons just cough a dud.
+      for (const p of parts) {
+        if (p.spec.type !== 'cannon') continue;
+        const cb = p.bodies[0], m = lab(cb), cm = m.cannon;
+        if (cm.cooldown > 0) cm.cooldown--;
+        if (cm.doorAnim > 0) cm.doorAnim--;
+        if (cm.fireAnim > 0) cm.fireAnim--;
+        const s = cannonSide(m);
+        if (!cm.loaded) {
+          for (const b of all) {
+            if (b.isStatic || b.isSensor || !b.circleRadius) continue;
+            const mb = lab(b);
+            if (!mb || mb.poppable || mb.buoyant || mb.swallowed) continue;
+            if (b.velocity.y < -0.5) continue; // rising bodies fly past, they don't "fall in"
+            const lx = b.position.x - cb.position.x, ly = b.position.y - cb.position.y;
+            if (Math.abs(lx + s * 18) > CANNON_MOUTH_HW || ly > -m.h / 2 + 4 || ly < -m.h / 2 - 36) continue;
+            // a ball on an uncut rope hangs — it can't drop into the hatch
+            if (parts.some(q => q.spec.type === 'rope'
+              && lab(q.bodies[0]).rope.attached === b && !lab(q.bodies[0]).rope.cut)) continue;
+            mb.swallowed = true;
+            Composite.remove(world, b);
+            cm.loaded = true; cm.ball = b; cm.doorAnim = 10;
+            state.events.push({ type: 'cannon_load', x: cb.position.x - s * 18, y: cb.position.y - m.h / 2, partId: m.id });
+            break;
+          }
+        }
+        if (!cm.fuseLit) continue;
+        cm.fuseT--;
+        if (cm.fuseT > 0) continue;
+        cm.fuseLit = false;
+        cm.cooldown = CANNON_COOLDOWN_FRAMES;
+        const mz = cannonMuzzle(cb);
+        if (cm.loaded && cm.ball) {
+          const ball = cm.ball, e = cannonElev(m);
+          const ux = Math.cos(e) * s, uy = -Math.sin(e);
+          lab(ball).swallowed = false;
+          Body.setPosition(ball, { x: mz.x + ux * (ball.circleRadius + 2), y: mz.y + uy * (ball.circleRadius + 2) });
+          Body.setVelocity(ball, { x: ux * CANNON_LAUNCH, y: uy * CANNON_LAUNCH });
+          Body.setAngularVelocity(ball, 0);
+          Composite.add(world, ball);
+          cm.loaded = false; cm.ball = null; cm.doorAnim = 10; cm.fireAnim = 14;
+          state.events.push({ type: 'cannon_fire', x: mz.x, y: mz.y, bodyId: ball.id, partId: m.id });
+        } else {
+          state.events.push({ type: 'cannon_dud', x: mz.x, y: mz.y, partId: m.id });
+        }
+      }
     }
 
     function checkGoal() {
@@ -1399,6 +1509,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         if (p.spec.type === 'hydrant' && lab(p.bodies[0]).hyd.active) return false;
         if (p.spec.type === 'laser' && lab(p.bodies[0]).laz.firing > 0) return false;
         if (p.spec.type === 'lens' && lab(p.bodies[0]).lens.firing > 0) return false;
+        if (p.spec.type === 'cannon' && lab(p.bodies[0]).cannon.fuseLit) return false;
       }
       let maxV = 0;
       for (const b of dynamicBodies()) {
@@ -3749,6 +3860,27 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       s.o.frequency.exponentialRampToValueAtTime(900 * r, t + 0.05);
       shot(b.o, t + 0.19, b.nodes.concat(noiseHit(t, 0.02, 'highpass', 5000, null, 0.1)));
       shot(s.o, t + 0.07, s.nodes);
+    },
+    cannonLoad: function (t) { // hatch snaps shut: wood clap + latch click
+      var r = rnd(0.95, 1.05);
+      var b = tone(t, 'sine', 240 * r, 0.07, 0.35, 0.001);
+      b.o.frequency.exponentialRampToValueAtTime(120 * r, t + 0.06);
+      shot(b.o, t + 0.1, b.nodes.concat(noiseHit(t, 0.02, 'bandpass', 2600, 5, 0.2)));
+    },
+    cannonBoom: function (t) { // BOOM: deep pitch-dive thump + low noise + air whoosh
+      var r = rnd(0.93, 1.07);
+      var b = tone(t, 'sine', 95 * r, 0.4, 0.65, 0.002);
+      b.o.frequency.exponentialRampToValueAtTime(38 * r, t + 0.32);
+      var n = noiseHit(t, 0.3, 'lowpass', 700, null, 0.5);
+      var air = noiseHit(t + 0.02, 0.2, 'bandpass', 1800, 1.2, 0.18);
+      shot(b.o, t + 0.45, b.nodes.concat(n, air));
+      duck(0.063, t); // half-depth duck, same as the bell
+    },
+    cannonDud: function (t) { // empty cannon: a sad little pfff
+      var n = noiseHit(t, 0.18, 'lowpass', 900, null, 0.22);
+      var b = tone(t, 'triangle', 220, 0.12, 0.1, 0.005, rnd(-30, 30));
+      b.o.frequency.exponentialRampToValueAtTime(140, t + 0.12);
+      shot(b.o, t + 0.15, b.nodes.concat(n));
     }
   };
 
@@ -4031,6 +4163,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         case 'switch_off': sfx('switchOff'); break;
         case 'ignite': sfx('igniteFizz'); break;
         case 'extinguish': sfx('extinguishHiss'); break;
+        case 'cannon_load': sfx('cannonLoad'); break;
+        case 'cannon_fire': sfx('cannonBoom'); break;
+        case 'cannon_dud': sfx('cannonDud'); break;
         case 'water_on': startLoop('water'); break;
         case 'water_off': stopLoop('water'); break;
         case 'fan_on': startLoop('fan'); break;
@@ -4983,6 +5118,99 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       c.fillStyle = C.paper; circle(c, 0, 0, d.r * 0.3); c.fill();
       c.restore();
     },
+
+    cannon(c, d, a, o, body) {
+      // Toy cannon: wooden chest on wheels, swivel-mounted barrel (d.elev =
+      // barrel elevation only — the chest never tilts), loading hatch on the
+      // top-back (OPEN = hungry, SHUT = loaded & ready), breech fuse at the
+      // back. Geometry mirrors core.js: pivot (10,-10), barrel length 46.
+      const cm = body ? body.plugin.lab.cannon
+        : { loaded: false, fuseLit: false, fuseT: 0, cooldown: 0, doorAnim: 0, fireAnim: 0 };
+      const t = o ? o.t : 0;
+      const elev = clamp(d.elev == null ? 45 : d.elev, 0, 75) * Math.PI / 180;
+      const hw = d.w / 2, hh = d.h / 2;
+      c.save();
+      if (d.dir === 'left') c.scale(-1, 1);
+      // wooden chest, top edge flush with the physics box top so resting
+      // balls sit true; the 14px shaved off the bottom makes room for wheels
+      c.save(); c.translate(0, -7); woodBlock(c, d.w, d.h - 14, 8); c.restore();
+      // wheels
+      for (const s of [-1, 1]) {
+        c.fillStyle = C.sunny; circle(c, s * 24, hh - 12, 12); c.fill();
+        c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, s * 24, hh - 12, 12); c.stroke();
+        c.strokeStyle = C.woodMid; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(s * 24 - 7, hh - 12); c.lineTo(s * 24 + 7, hh - 12); c.stroke();
+        c.fillStyle = C.woodMid; circle(c, s * 24, hh - 12, 3.5); c.fill();
+      }
+      // star charm on the chest front
+      c.fillStyle = C.sunny; star4(c, 26, 6, 6, 0.2); c.fill();
+      // loading hatch: dark mouth + a chunky trapdoor lid hinged at the back
+      // edge. OPEN = flipped back over the breech (hungry), SHUT = lying
+      // proud on top with its knob up (loaded & ready). doorAnim (10->0)
+      // tweens toward the current resting pose, so loading reads as a slam.
+      const k = clamp(cm.doorAnim / 10, 0, 1);
+      const lidA = cm.loaded ? -2.0 * k : -2.0 * (1 - k);
+      if (lidA < -0.1) { // the mouth, visible while the lid is open(ing)
+        c.fillStyle = 'rgba(46,35,27,0.75)';
+        rr(c, -38, -hh, 40, 7, 3.5); c.fill();
+        c.fillStyle = 'rgba(255,249,238,0.18)';
+        rr(c, -36, -hh + 1, 36, 2, 1); c.fill(); // inner lip glint
+      }
+      c.save();
+      c.translate(-42, -hh + 1); c.rotate(lidA);
+      const g2 = c.createLinearGradient(0, -8, 0, 0);
+      g2.addColorStop(0, C.woodLight); g2.addColorStop(1, C.woodMid);
+      c.fillStyle = g2; rr(c, 0, -8, 46, 8, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, 0, -8, 46, 8, 4); c.stroke();
+      c.fillStyle = C.poppy; circle(c, 23, -8, 3.2); c.fill(); // lid knob
+      c.strokeStyle = C.outline; c.lineWidth = 1.2; circle(c, 23, -8, 3.2); c.stroke();
+      c.restore();
+      // barrel on its swivel mount, recoiling back along its own axis
+      c.save();
+      c.translate(10, -10); c.rotate(-elev);
+      if (cm.fireAnim > 0) c.translate(-cm.fireAnim * 0.8, 0);
+      c.fillStyle = C.poppy; circle(c, -18, 0, 6); c.fill(); // cascabel knob
+      c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, -18, 0, 6); c.stroke();
+      const g = c.createLinearGradient(0, -10, 0, 10);
+      g.addColorStop(0, '#6FA0EA'); g.addColorStop(0.5, C.loryBlue); g.addColorStop(1, C.blueDeep);
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(-14, -9.5); c.lineTo(40, -7.5); c.lineTo(40, 7.5); c.lineTo(-14, 9.5); c.closePath(); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; c.stroke();
+      c.strokeStyle = C.sunny; c.lineWidth = 3; // stripe charm near the muzzle
+      c.beginPath(); c.moveTo(28, -7.5); c.lineTo(28, 7.5); c.stroke();
+      c.fillStyle = C.blueDeep; rr(c, 38, -9.5, 8, 19, 3); c.fill(); // muzzle ring
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, 38, -9.5, 8, 19, 3); c.stroke();
+      if (cm.fireAnim > 8) { // muzzle flash, first frames only
+        const fk = (cm.fireAnim - 8) / 6;
+        c.fillStyle = `rgba(255,197,61,${0.9 * fk})`; star4(c, 52, 0, 6 + 16 * fk, t * 9); c.fill();
+        c.fillStyle = `rgba(255,243,176,${0.9 * fk})`; circle(c, 50, 0, 2 + 7 * fk); c.fill();
+      }
+      c.restore();
+      // swivel bolt over the barrel: reads as the mount
+      c.fillStyle = C.sunny; circle(c, 10, -10, 5.5); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; circle(c, 10, -10, 5.5); c.stroke();
+      // breech fuse: cord curling out of the touch-hole at the top-back
+      const fx0 = -hw - 8, fy0 = -hh + 8;
+      for (const [col, lw] of [[C.woodDark, 4], [C.tangerine, 1.6]]) {
+        c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(-hw + 3, -hh + 12);
+        c.quadraticCurveTo(-hw - 8, -hh + 16, fx0, fy0); c.stroke();
+      }
+      if (cm.fuseLit) { // sizzling spark — same language as the fuse part
+        const tw = 0.7 + 0.3 * Math.sin(t * 30);
+        const g3 = c.createRadialGradient(fx0, fy0, 1, fx0, fy0, 16);
+        g3.addColorStop(0, 'rgba(255,243,176,0.9)'); g3.addColorStop(1, 'rgba(255,142,60,0)');
+        c.fillStyle = g3; circle(c, fx0, fy0, 16); c.fill();
+        c.fillStyle = `rgba(255,197,61,${tw})`; star4(c, fx0, fy0, 9, t * 6); c.fill();
+        c.fillStyle = '#FFF3B0'; circle(c, fx0, fy0, 3); c.fill();
+      } else if (cm.cooldown > 0) { // just fired: charred tip + smoke wisp
+        c.fillStyle = 'rgba(67,52,43,0.55)'; circle(c, fx0, fy0, 3); c.fill();
+        c.strokeStyle = 'rgba(140,122,107,0.6)'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(fx0, fy0 - 3);
+        c.quadraticCurveTo(fx0 + 4, fy0 - 10, fx0 + 1, fy0 - 16); c.stroke();
+      }
+      c.restore();
+    },
   };
 
   // ---------------------------------------------------------------------------
@@ -5240,6 +5468,12 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         case 'laser': fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 4); break;
         case 'bulb_on': fx.ring(e.x, e.y, C.sunny); fx.stars(e.x, e.y - 10, 3); break;
         case 'bulb_off': fx.poof(e.x, e.y - 10, 3); break;
+        case 'cannon_load': fx.ring(e.x, e.y, C.sunny); fx.poof(e.x, e.y, 3); break;
+        case 'cannon_fire':
+          fx.poof(e.x, e.y, 10); fx.ring(e.x, e.y, C.sunny); fx.stars(e.x, e.y, 6);
+          for (let i = 0; i < 6; i++) spawn({ kind: 'flamep', x: e.x, y: e.y, vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4 - 1, life: 0.4, t: 0, r: 3.5 });
+          break;
+        case 'cannon_dud': fx.poof(e.x, e.y, 5); break;
         case 'win': shakeT = 0; break;
       }
     }
@@ -5428,7 +5662,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         c.rotate(va); c.scale(1 + k2, 1 - k2 * 0.7); c.rotate(-va);
       }
     }
-    const d = { type, w: m.w, h: m.h, r: PART_R(spec), dir: m.dir, seed: body.id };
+    const d = { type, w: m.w, h: m.h, r: PART_R(spec), dir: m.dir, seed: body.id, elev: spec.angle };
     // puzzle-maker: parts plucked into the future tray render faded
     const plucked = m.spec && m.spec._plucked;
     if (plucked) c.globalAlpha = 0.35;
@@ -5545,7 +5779,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     opts = opts || {};
     c.save();
     c.translate(spec.x, spec.y);
-    c.rotate((spec.angle || 0) * Math.PI / 180);
+    // cannon angle = barrel elevation, not body rotation — never tilt it
+    if (spec.type !== 'cannon') c.rotate((spec.angle || 0) * Math.PI / 180);
     if (opts.style === 'hint') {
       const pulse = 0.5 + 0.4 * Math.abs(Math.sin(o.t * TAU / 1.2 / 2));
       c.globalAlpha = pulse;
@@ -5558,12 +5793,12 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       else { rr(c, -w / 2 - 4, -h / 2 - 4, w + 8, h + 8, 8); c.fill(); c.stroke(); }
       c.setLineDash([]);
       c.globalAlpha = pulse * 0.8;
-      const d = { type: spec.type, w, h, r: defs.r, dir: spec.dir };
+      const d = { type: spec.type, w, h, r: defs.r, dir: spec.dir, elev: spec.angle };
       (painters[spec.type] || painters.plank)(c, d, null, o, null);
     } else {
       c.globalAlpha = opts.invalid ? 0.75 : 0.9;
       const defs = window.LoryCore.PART_DEFS[spec.type];
-      const d = { type: spec.type, w: spec.w || defs.w, h: spec.h || defs.h, r: defs.r, dir: spec.dir };
+      const d = { type: spec.type, w: spec.w || defs.w, h: spec.h || defs.h, r: defs.r, dir: spec.dir, elev: spec.angle };
       c.save();
       if (opts.lift) { c.scale(1.06, 1.06); }
       (painters[spec.type] || painters.plank)(c, d, null, o, null);
@@ -5587,7 +5822,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     const w = (sel.w || defs.w || defs.r * 2), h = (sel.h || defs.h || defs.r * 2);
     c.save();
     c.translate(sel.x, sel.y);
-    c.save(); c.rotate((sel.angle || 0) * Math.PI / 180);
+    c.save();
+    if (sel.type !== 'cannon') c.rotate((sel.angle || 0) * Math.PI / 180); // cannon angle = elevation
     c.strokeStyle = C.loryBlue; c.lineWidth = 3; c.setLineDash([6, 5]);
     c.lineDashOffset = -(o.t * 16 % 11);
     rr(c, -w / 2 - 8, -h / 2 - 8, w + 16, h + 16, 12); c.stroke();
@@ -5634,7 +5870,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   }
 
   // tray. boost enlarges wells on small screens. When the full set would
-  // squeeze wells below a comfortable width (the 31-well sandbox!), the tray
+  // squeeze wells below a comfortable width (the 32-well sandbox!), the tray
   // paginates: big ‹ › buttons flip between pages of comfortable wells.
   function drawTray(c, tray, o, dragType, boost, pageIn) {
     const B = boost || 1;
@@ -5944,7 +6180,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   const SANDBOX_TRAY = [
     ['plank', 8], ['shelf', 4], ['wall', 2], ['trampoline', 3], ['seesaw', 2], ['fan', 3],
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
-    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2], ['bulb', 2], ['lens', 2],
+    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2], ['bulb', 2], ['lens', 2], ['cannon', 2],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
     ['balloon_goal', 4], ['spikes', 2], ['sparkle', 3],
   ];
@@ -6380,7 +6616,14 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     if (!p) return;
     const defs = Core.PART_DEFS[p.type];
     if (!defs.rot) return;
-    p.angle = ((p.angle || 0) + dir * 15 + 360) % 360;
+    if (p.type === 'cannon') {
+      // cannon angle = barrel elevation: clamped 0–75, never wraps
+      const next = Math.max(0, Math.min(75, (p.angle || 0) + dir * 15));
+      if (next === (p.angle || 0)) { A.sfx('invalid'); return; }
+      p.angle = next;
+    } else {
+      p.angle = ((p.angle || 0) + dir * 15 + 360) % 360;
+    }
     rebuildSim();
     A.sfx('rotate');
   }
@@ -6419,6 +6662,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     laser: 'PEW! Touch it and the beam pops balloons, lights fires and cuts strings. Walls block it.',
     bulb: 'Press its button to switch the light on and off — ⇄ moves the button. Shine it into a lens!',
     lens: 'It focuses light! Put it near a glowing bulb and out comes a laser beam.',
+    cannon: 'Drop a ball in the top hatch — the door snaps shut! Light the back fuse with any flame and BOOM! ⟲⟳ aims the barrel, ⇄ turns it around.',
     ball_beach: 'A light, bouncy beach ball — the wind loves it.',
     ball_marble: 'A heavy metal marble. Magnets love it!',
     berry: 'My berry! Roll it into my bowl to feed me!',
@@ -7017,7 +7261,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
           const defs = Core.PART_DEFS[w.type];
           const spec = { type: w.type, x: Math.round(bpt.x), y: Math.round(bpt.y) };
           if (defs.dir) spec.dir = defs.dir[0];
-          if (w.type === 'laser') spec.angle = 90; // out of the tray it fires sideways, not up
+          if (w.type === 'laser') spec.angle = 90;  // out of the tray it fires sideways, not up
+          if (w.type === 'cannon') spec.angle = 45; // out of the tray it aims a jaunty 45° up
           trayItem(w.type).count--;
           S.drag = { spec, from: 'tray', invalid: true, pointerId: e.pointerId };
           S.selection = null;
@@ -7301,7 +7546,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
       const p = S.placements[S.selection];
       const defs = p && Core.PART_DEFS[p.type];
       if (!defs || !defs.rot) return;
-      p.angle = ((p.angle || 0) + (e.deltaY > 0 ? 5 : -5) + 360) % 360;
+      if (p.type === 'cannon') p.angle = Math.max(0, Math.min(75, (p.angle || 0) + (e.deltaY > 0 ? 5 : -5)));
+      else p.angle = ((p.angle || 0) + (e.deltaY > 0 ? 5 : -5) + 360) % 360;
       rebuildSim();
       A.sfx('rotate');
     }, { passive: false });

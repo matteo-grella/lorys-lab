@@ -305,6 +305,27 @@
       s.o.frequency.exponentialRampToValueAtTime(900 * r, t + 0.05);
       shot(b.o, t + 0.19, b.nodes.concat(noiseHit(t, 0.02, 'highpass', 5000, null, 0.1)));
       shot(s.o, t + 0.07, s.nodes);
+    },
+    cannonLoad: function (t) { // hatch snaps shut: wood clap + latch click
+      var r = rnd(0.95, 1.05);
+      var b = tone(t, 'sine', 240 * r, 0.07, 0.35, 0.001);
+      b.o.frequency.exponentialRampToValueAtTime(120 * r, t + 0.06);
+      shot(b.o, t + 0.1, b.nodes.concat(noiseHit(t, 0.02, 'bandpass', 2600, 5, 0.2)));
+    },
+    cannonBoom: function (t) { // BOOM: deep pitch-dive thump + low noise + air whoosh
+      var r = rnd(0.93, 1.07);
+      var b = tone(t, 'sine', 95 * r, 0.4, 0.65, 0.002);
+      b.o.frequency.exponentialRampToValueAtTime(38 * r, t + 0.32);
+      var n = noiseHit(t, 0.3, 'lowpass', 700, null, 0.5);
+      var air = noiseHit(t + 0.02, 0.2, 'bandpass', 1800, 1.2, 0.18);
+      shot(b.o, t + 0.45, b.nodes.concat(n, air));
+      duck(0.063, t); // half-depth duck, same as the bell
+    },
+    cannonDud: function (t) { // empty cannon: a sad little pfff
+      var n = noiseHit(t, 0.18, 'lowpass', 900, null, 0.22);
+      var b = tone(t, 'triangle', 220, 0.12, 0.1, 0.005, rnd(-30, 30));
+      b.o.frequency.exponentialRampToValueAtTime(140, t + 0.12);
+      shot(b.o, t + 0.15, b.nodes.concat(n));
     }
   };
 
@@ -587,6 +608,9 @@
         case 'switch_off': sfx('switchOff'); break;
         case 'ignite': sfx('igniteFizz'); break;
         case 'extinguish': sfx('extinguishHiss'); break;
+        case 'cannon_load': sfx('cannonLoad'); break;
+        case 'cannon_fire': sfx('cannonBoom'); break;
+        case 'cannon_dud': sfx('cannonDud'); break;
         case 'water_on': startLoop('water'); break;
         case 'water_off': stopLoop('water'); break;
         case 'fan_on': startLoop('fan'); break;

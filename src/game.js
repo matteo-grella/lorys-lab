@@ -97,7 +97,7 @@
   const SANDBOX_TRAY = [
     ['plank', 8], ['shelf', 4], ['wall', 2], ['trampoline', 3], ['seesaw', 2], ['fan', 3],
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
-    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2], ['bulb', 2], ['lens', 2],
+    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2], ['bulb', 2], ['lens', 2], ['cannon', 2],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
     ['balloon_goal', 4], ['spikes', 2], ['sparkle', 3],
   ];
@@ -533,7 +533,14 @@
     if (!p) return;
     const defs = Core.PART_DEFS[p.type];
     if (!defs.rot) return;
-    p.angle = ((p.angle || 0) + dir * 15 + 360) % 360;
+    if (p.type === 'cannon') {
+      // cannon angle = barrel elevation: clamped 0–75, never wraps
+      const next = Math.max(0, Math.min(75, (p.angle || 0) + dir * 15));
+      if (next === (p.angle || 0)) { A.sfx('invalid'); return; }
+      p.angle = next;
+    } else {
+      p.angle = ((p.angle || 0) + dir * 15 + 360) % 360;
+    }
     rebuildSim();
     A.sfx('rotate');
   }
@@ -572,6 +579,7 @@
     laser: 'PEW! Touch it and the beam pops balloons, lights fires and cuts strings. Walls block it.',
     bulb: 'Press its button to switch the light on and off — ⇄ moves the button. Shine it into a lens!',
     lens: 'It focuses light! Put it near a glowing bulb and out comes a laser beam.',
+    cannon: 'Drop a ball in the top hatch — the door snaps shut! Light the back fuse with any flame and BOOM! ⟲⟳ aims the barrel, ⇄ turns it around.',
     ball_beach: 'A light, bouncy beach ball — the wind loves it.',
     ball_marble: 'A heavy metal marble. Magnets love it!',
     berry: 'My berry! Roll it into my bowl to feed me!',
@@ -1170,7 +1178,8 @@
           const defs = Core.PART_DEFS[w.type];
           const spec = { type: w.type, x: Math.round(bpt.x), y: Math.round(bpt.y) };
           if (defs.dir) spec.dir = defs.dir[0];
-          if (w.type === 'laser') spec.angle = 90; // out of the tray it fires sideways, not up
+          if (w.type === 'laser') spec.angle = 90;  // out of the tray it fires sideways, not up
+          if (w.type === 'cannon') spec.angle = 45; // out of the tray it aims a jaunty 45° up
           trayItem(w.type).count--;
           S.drag = { spec, from: 'tray', invalid: true, pointerId: e.pointerId };
           S.selection = null;
@@ -1454,7 +1463,8 @@
       const p = S.placements[S.selection];
       const defs = p && Core.PART_DEFS[p.type];
       if (!defs || !defs.rot) return;
-      p.angle = ((p.angle || 0) + (e.deltaY > 0 ? 5 : -5) + 360) % 360;
+      if (p.type === 'cannon') p.angle = Math.max(0, Math.min(75, (p.angle || 0) + (e.deltaY > 0 ? 5 : -5)));
+      else p.angle = ((p.angle || 0) + (e.deltaY > 0 ? 5 : -5) + 360) % 360;
       rebuildSim();
       A.sfx('rotate');
     }, { passive: false });

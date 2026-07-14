@@ -921,6 +921,99 @@
       c.fillStyle = C.paper; circle(c, 0, 0, d.r * 0.3); c.fill();
       c.restore();
     },
+
+    cannon(c, d, a, o, body) {
+      // Toy cannon: wooden chest on wheels, swivel-mounted barrel (d.elev =
+      // barrel elevation only — the chest never tilts), loading hatch on the
+      // top-back (OPEN = hungry, SHUT = loaded & ready), breech fuse at the
+      // back. Geometry mirrors core.js: pivot (10,-10), barrel length 46.
+      const cm = body ? body.plugin.lab.cannon
+        : { loaded: false, fuseLit: false, fuseT: 0, cooldown: 0, doorAnim: 0, fireAnim: 0 };
+      const t = o ? o.t : 0;
+      const elev = clamp(d.elev == null ? 45 : d.elev, 0, 75) * Math.PI / 180;
+      const hw = d.w / 2, hh = d.h / 2;
+      c.save();
+      if (d.dir === 'left') c.scale(-1, 1);
+      // wooden chest, top edge flush with the physics box top so resting
+      // balls sit true; the 14px shaved off the bottom makes room for wheels
+      c.save(); c.translate(0, -7); woodBlock(c, d.w, d.h - 14, 8); c.restore();
+      // wheels
+      for (const s of [-1, 1]) {
+        c.fillStyle = C.sunny; circle(c, s * 24, hh - 12, 12); c.fill();
+        c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, s * 24, hh - 12, 12); c.stroke();
+        c.strokeStyle = C.woodMid; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(s * 24 - 7, hh - 12); c.lineTo(s * 24 + 7, hh - 12); c.stroke();
+        c.fillStyle = C.woodMid; circle(c, s * 24, hh - 12, 3.5); c.fill();
+      }
+      // star charm on the chest front
+      c.fillStyle = C.sunny; star4(c, 26, 6, 6, 0.2); c.fill();
+      // loading hatch: dark mouth + a chunky trapdoor lid hinged at the back
+      // edge. OPEN = flipped back over the breech (hungry), SHUT = lying
+      // proud on top with its knob up (loaded & ready). doorAnim (10->0)
+      // tweens toward the current resting pose, so loading reads as a slam.
+      const k = clamp(cm.doorAnim / 10, 0, 1);
+      const lidA = cm.loaded ? -2.0 * k : -2.0 * (1 - k);
+      if (lidA < -0.1) { // the mouth, visible while the lid is open(ing)
+        c.fillStyle = 'rgba(46,35,27,0.75)';
+        rr(c, -38, -hh, 40, 7, 3.5); c.fill();
+        c.fillStyle = 'rgba(255,249,238,0.18)';
+        rr(c, -36, -hh + 1, 36, 2, 1); c.fill(); // inner lip glint
+      }
+      c.save();
+      c.translate(-42, -hh + 1); c.rotate(lidA);
+      const g2 = c.createLinearGradient(0, -8, 0, 0);
+      g2.addColorStop(0, C.woodLight); g2.addColorStop(1, C.woodMid);
+      c.fillStyle = g2; rr(c, 0, -8, 46, 8, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, 0, -8, 46, 8, 4); c.stroke();
+      c.fillStyle = C.poppy; circle(c, 23, -8, 3.2); c.fill(); // lid knob
+      c.strokeStyle = C.outline; c.lineWidth = 1.2; circle(c, 23, -8, 3.2); c.stroke();
+      c.restore();
+      // barrel on its swivel mount, recoiling back along its own axis
+      c.save();
+      c.translate(10, -10); c.rotate(-elev);
+      if (cm.fireAnim > 0) c.translate(-cm.fireAnim * 0.8, 0);
+      c.fillStyle = C.poppy; circle(c, -18, 0, 6); c.fill(); // cascabel knob
+      c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, -18, 0, 6); c.stroke();
+      const g = c.createLinearGradient(0, -10, 0, 10);
+      g.addColorStop(0, '#6FA0EA'); g.addColorStop(0.5, C.loryBlue); g.addColorStop(1, C.blueDeep);
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(-14, -9.5); c.lineTo(40, -7.5); c.lineTo(40, 7.5); c.lineTo(-14, 9.5); c.closePath(); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; c.stroke();
+      c.strokeStyle = C.sunny; c.lineWidth = 3; // stripe charm near the muzzle
+      c.beginPath(); c.moveTo(28, -7.5); c.lineTo(28, 7.5); c.stroke();
+      c.fillStyle = C.blueDeep; rr(c, 38, -9.5, 8, 19, 3); c.fill(); // muzzle ring
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, 38, -9.5, 8, 19, 3); c.stroke();
+      if (cm.fireAnim > 8) { // muzzle flash, first frames only
+        const fk = (cm.fireAnim - 8) / 6;
+        c.fillStyle = `rgba(255,197,61,${0.9 * fk})`; star4(c, 52, 0, 6 + 16 * fk, t * 9); c.fill();
+        c.fillStyle = `rgba(255,243,176,${0.9 * fk})`; circle(c, 50, 0, 2 + 7 * fk); c.fill();
+      }
+      c.restore();
+      // swivel bolt over the barrel: reads as the mount
+      c.fillStyle = C.sunny; circle(c, 10, -10, 5.5); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; circle(c, 10, -10, 5.5); c.stroke();
+      // breech fuse: cord curling out of the touch-hole at the top-back
+      const fx0 = -hw - 8, fy0 = -hh + 8;
+      for (const [col, lw] of [[C.woodDark, 4], [C.tangerine, 1.6]]) {
+        c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(-hw + 3, -hh + 12);
+        c.quadraticCurveTo(-hw - 8, -hh + 16, fx0, fy0); c.stroke();
+      }
+      if (cm.fuseLit) { // sizzling spark — same language as the fuse part
+        const tw = 0.7 + 0.3 * Math.sin(t * 30);
+        const g3 = c.createRadialGradient(fx0, fy0, 1, fx0, fy0, 16);
+        g3.addColorStop(0, 'rgba(255,243,176,0.9)'); g3.addColorStop(1, 'rgba(255,142,60,0)');
+        c.fillStyle = g3; circle(c, fx0, fy0, 16); c.fill();
+        c.fillStyle = `rgba(255,197,61,${tw})`; star4(c, fx0, fy0, 9, t * 6); c.fill();
+        c.fillStyle = '#FFF3B0'; circle(c, fx0, fy0, 3); c.fill();
+      } else if (cm.cooldown > 0) { // just fired: charred tip + smoke wisp
+        c.fillStyle = 'rgba(67,52,43,0.55)'; circle(c, fx0, fy0, 3); c.fill();
+        c.strokeStyle = 'rgba(140,122,107,0.6)'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(fx0, fy0 - 3);
+        c.quadraticCurveTo(fx0 + 4, fy0 - 10, fx0 + 1, fy0 - 16); c.stroke();
+      }
+      c.restore();
+    },
   };
 
   // ---------------------------------------------------------------------------
@@ -1178,6 +1271,12 @@
         case 'laser': fx.ring(e.x, e.y, C.poppy); fx.stars(e.x, e.y, 4); break;
         case 'bulb_on': fx.ring(e.x, e.y, C.sunny); fx.stars(e.x, e.y - 10, 3); break;
         case 'bulb_off': fx.poof(e.x, e.y - 10, 3); break;
+        case 'cannon_load': fx.ring(e.x, e.y, C.sunny); fx.poof(e.x, e.y, 3); break;
+        case 'cannon_fire':
+          fx.poof(e.x, e.y, 10); fx.ring(e.x, e.y, C.sunny); fx.stars(e.x, e.y, 6);
+          for (let i = 0; i < 6; i++) spawn({ kind: 'flamep', x: e.x, y: e.y, vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4 - 1, life: 0.4, t: 0, r: 3.5 });
+          break;
+        case 'cannon_dud': fx.poof(e.x, e.y, 5); break;
         case 'win': shakeT = 0; break;
       }
     }
@@ -1366,7 +1465,7 @@
         c.rotate(va); c.scale(1 + k2, 1 - k2 * 0.7); c.rotate(-va);
       }
     }
-    const d = { type, w: m.w, h: m.h, r: PART_R(spec), dir: m.dir, seed: body.id };
+    const d = { type, w: m.w, h: m.h, r: PART_R(spec), dir: m.dir, seed: body.id, elev: spec.angle };
     // puzzle-maker: parts plucked into the future tray render faded
     const plucked = m.spec && m.spec._plucked;
     if (plucked) c.globalAlpha = 0.35;
@@ -1483,7 +1582,8 @@
     opts = opts || {};
     c.save();
     c.translate(spec.x, spec.y);
-    c.rotate((spec.angle || 0) * Math.PI / 180);
+    // cannon angle = barrel elevation, not body rotation — never tilt it
+    if (spec.type !== 'cannon') c.rotate((spec.angle || 0) * Math.PI / 180);
     if (opts.style === 'hint') {
       const pulse = 0.5 + 0.4 * Math.abs(Math.sin(o.t * TAU / 1.2 / 2));
       c.globalAlpha = pulse;
@@ -1496,12 +1596,12 @@
       else { rr(c, -w / 2 - 4, -h / 2 - 4, w + 8, h + 8, 8); c.fill(); c.stroke(); }
       c.setLineDash([]);
       c.globalAlpha = pulse * 0.8;
-      const d = { type: spec.type, w, h, r: defs.r, dir: spec.dir };
+      const d = { type: spec.type, w, h, r: defs.r, dir: spec.dir, elev: spec.angle };
       (painters[spec.type] || painters.plank)(c, d, null, o, null);
     } else {
       c.globalAlpha = opts.invalid ? 0.75 : 0.9;
       const defs = window.LoryCore.PART_DEFS[spec.type];
-      const d = { type: spec.type, w: spec.w || defs.w, h: spec.h || defs.h, r: defs.r, dir: spec.dir };
+      const d = { type: spec.type, w: spec.w || defs.w, h: spec.h || defs.h, r: defs.r, dir: spec.dir, elev: spec.angle };
       c.save();
       if (opts.lift) { c.scale(1.06, 1.06); }
       (painters[spec.type] || painters.plank)(c, d, null, o, null);
@@ -1525,7 +1625,8 @@
     const w = (sel.w || defs.w || defs.r * 2), h = (sel.h || defs.h || defs.r * 2);
     c.save();
     c.translate(sel.x, sel.y);
-    c.save(); c.rotate((sel.angle || 0) * Math.PI / 180);
+    c.save();
+    if (sel.type !== 'cannon') c.rotate((sel.angle || 0) * Math.PI / 180); // cannon angle = elevation
     c.strokeStyle = C.loryBlue; c.lineWidth = 3; c.setLineDash([6, 5]);
     c.lineDashOffset = -(o.t * 16 % 11);
     rr(c, -w / 2 - 8, -h / 2 - 8, w + 16, h + 16, 12); c.stroke();
@@ -1572,7 +1673,7 @@
   }
 
   // tray. boost enlarges wells on small screens. When the full set would
-  // squeeze wells below a comfortable width (the 31-well sandbox!), the tray
+  // squeeze wells below a comfortable width (the 32-well sandbox!), the tray
   // paginates: big ‹ › buttons flip between pages of comfortable wells.
   function drawTray(c, tray, o, dragType, boost, pageIn) {
     const B = boost || 1;

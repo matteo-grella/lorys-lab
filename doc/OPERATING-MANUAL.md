@@ -79,8 +79,10 @@ lists go in the part's guide table row.
 - one-shot & spent (match) · timed burst (hydrant, magnet, laser)
 - toggle (bulb) · powered-while (all switch loads)
 - **author-settable initial state**: candle `lit`, fan `on`. ⚠️ Each such
-  boolean consumes one wire-format "extra" slot and parts have AT MOST TWO
-  (dir/angle + one `false` flag). A part needing dir + angle, or two boolean
+  boolean consumes one wire-format "extra" slot and parts have AT MOST TWO,
+  one per kind (dir string, angle number, `false` flag). dir + angle fits —
+  the cannon does exactly that (its "angle" is barrel elevation, the body
+  never rotates) — but a part needing dir + angle + a flag, or two boolean
   flags, means real format work — think before you commit to that (§4.4 of
   the guide, "Puzzle sharing").
 
@@ -105,7 +107,11 @@ Touch the layers in THIS order. Do not skip; do not reorder. (Extends the
 guide's recipe 11.1 with everything learned since.)
 
 1. **`core.js PART_DEFS`** — size, `static`, `placeable`, `rot` OR `dir`
-   (never both: the wire format allows one orientation extra). Body should
+   (both only if the part needs no third extra — the wire format holds two,
+   one per kind; the cannon is the precedent, and note its `angle` is barrel
+   elevation, not body rotation, which costs special-casing in
+   `rotateSelection`, the wheel handler, `drawGhost` and `drawSelection`).
+   Body should
    hug the visual silhouette (the laser was resized 60×44→44×56 for this).
 2. **`core.js MATERIAL`** — pick the impact-sound class (wood/marble/
    magnet/rubber/…). Metal-ish machine → `'magnet'`.

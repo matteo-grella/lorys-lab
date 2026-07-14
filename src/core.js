@@ -40,6 +40,11 @@
     laser:       { w: 44,  h: 56,  static: true,  placeable: true, rot: true },
     bulb:        { w: 44,  h: 58,  static: true,  placeable: true, dir: ['right', 'left', 'up'] },
     lens:        { w: 46,  h: 26,  static: true,  placeable: true, rot: true },
+    // the first part with BOTH orientation extras (the wire format holds
+    // exactly two, one of each kind): dir mirrors the cannon, `angle` is the
+    // BARREL ELEVATION 0–75° — the body itself never rotates, so the loading
+    // hatch on top keeps working at every aim
+    cannon:      { w: 92,  h: 62,  static: true,  placeable: true, rot: true, dir: ['right', 'left'] },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -63,7 +68,7 @@
     balloon: 'balloon', balloon_goal: 'balloon', bell: 'bell', bowl: 'wood', spikes: 'wood',
     rope: 'wood', scissors: 'magnet', candle: 'wood', fuse: 'wood',
     hydrant: 'magnet', switch: 'wood', fist: 'bumper', match: 'wood', laser: 'magnet',
-    bulb: 'magnet', lens: 'magnet',
+    bulb: 'magnet', lens: 'magnet', cannon: 'magnet',
   };
 
   const FAN_REACH = 280;
@@ -90,6 +95,11 @@
   const BULB_BUTTON_COOLDOWN = 20;  // absorbs one landing's contact rattle,
                                     // short enough that a re-bounce re-presses
   const LENS_REACH = 220;           // how close a lit bulb must be to feed a lens
+  const CANNON_LAUNCH = 17;         // muzzle speed (px/frame), a touch over the fist's 15
+  const CANNON_FUSE_FRAMES = 80;    // breech fuse sizzles ~1.3s of anticipation, then BOOM
+  const CANNON_COOLDOWN_FRAMES = 60;// re-arm time before the fuse can be lit again
+  const CANNON_MOUTH_HW = 20;       // half-width of the loading-hatch capture zone
+  const CANNON_ELEV_MAX = 75;       // barrel elevation clamp (editor + hostile codes)
 
   let nextId = 1;
 
@@ -271,6 +281,17 @@
         // the laser cannon along its local "up".
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.1 }),
           { lens: { firing: 0, beamLen: 0 } }));
+        break;
+
+      case 'cannon':
+        // Toy cannon. A roller that drops onto the open top hatch is
+        // swallowed and the door snaps shut (closed door = loaded & ready);
+        // any flame or beam on the breech fuse fires it CANNON_FUSE_FRAMES
+        // later. spec.angle is barrel ELEVATION (render + launch vector
+        // only), deliberately NOT applied to the body: the hatch must stay
+        // on top at every aim.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.15 }),
+          { cannon: { loaded: false, ball: null, fuseLit: false, fuseT: 0, cooldown: 0, doorAnim: 0, fireAnim: 0 } }));
         break;
 
       case 'domino':
@@ -674,6 +695,27 @@
       const head = matchHead(body, m.h);
       state.events.push({ type: 'ignite', x: head.x, y: head.y });
     }
+    // cannon geometry: the body never rotates, so everything is axis-aligned
+    // math off dir (side) and spec.angle (barrel elevation, clamped)
+    const cannonSide = (m) => m.dir === 'left' ? -1 : 1;
+    const cannonElev = (m) => Math.max(0, Math.min(CANNON_ELEV_MAX, m.spec.angle || 0)) * Math.PI / 180;
+    // touch-hole at the TOP of the back face: reachable by a candle standing
+    // on the same floor as the cannon (flame tips sit high)
+    const cannonFuseTip = (body) => {
+      const m = lab(body);
+      return { x: body.position.x - cannonSide(m) * (m.w / 2 + 8), y: body.position.y - m.h / 2 + 8 };
+    };
+    const cannonMuzzle = (body) => {
+      const m = lab(body), s = cannonSide(m), e = cannonElev(m);
+      return { x: body.position.x + s * (10 + Math.cos(e) * 46), y: body.position.y - 10 - Math.sin(e) * 46 };
+    };
+    function lightCannon(body) {
+      const cm = lab(body).cannon;
+      if (cm.fuseLit || cm.cooldown > 0) return;
+      cm.fuseLit = true; cm.fuseT = CANNON_FUSE_FRAMES;
+      const tip = cannonFuseTip(body);
+      state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
+    }
     function ropeEnds(p) {
       const anchor = p.bodies[0], m = lab(anchor);
       if (!m.rope.attached) return null;
@@ -902,6 +944,13 @@
                 break;
               }
             }
+          } else if (q.spec.type === 'cannon') {
+            const cm = lab(q.bodies[0]).cannon;
+            const tip = cannonFuseTip(q.bodies[0]);
+            if (cm.fuseLit && rectContains(region, tip)) {
+              cm.fuseLit = false; // endless cord: relightable once dry
+              state.events.push({ type: 'extinguish', x: tip.x, y: tip.y });
+            }
           }
         }
       }
@@ -971,6 +1020,12 @@
             const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
             if (!mm.lit && !mm.dead && Math.hypot(head.x - f.x, head.y - f.y) < FLAME_R * 1.3)
               strikeMatch(q.bodies[0]);
+          } else if (q.spec.type === 'cannon') {
+            // deliberately one-way: the cannon's sizzling breech fuse is
+            // never itself a flame point (it fires the cannon, nothing else)
+            const tip = cannonFuseTip(q.bodies[0]);
+            if (Math.hypot(tip.x - f.x, tip.y - f.y) < FLAME_R * 1.3)
+              lightCannon(q.bodies[0]);
           } else if (q.spec.type === 'rope') {
             const ends = ropeEnds(q);
             if (ends && distPointSeg(f, ends[0], ends[1]) < 14) cutRope(q, f.x, f.y, 'fire');
@@ -1048,6 +1103,9 @@
             const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
             if (!mm.lit && !mm.dead && distPointSeg(head, mz, end) < 20)
               strikeMatch(q.bodies[0]);
+          } else if (q.spec.type === 'cannon') {
+            const tip = cannonFuseTip(q.bodies[0]);
+            if (distPointSeg(tip, mz, end) < 20) lightCannon(q.bodies[0]);
           } else if (q.spec.type === 'fuse') {
             const qb = q.bodies[0], fm = lab(qb).fuse;
             if (fm.dead) continue;
@@ -1137,6 +1195,58 @@
         const fm = lab(p.bodies[0]).fist;
         if (fm.cooldown > 0) fm.cooldown--;
       }
+
+      // Cannons. Loading: a roller (any dynamic circle that isn't buoyant or
+      // poppable — beach ball, marble, berry) whose center drops into the
+      // hatch zone above the top face is swallowed; the door snaps shut
+      // (closed door = loaded & ready — the visual cue). Firing: when the lit
+      // breech fuse burns down, the stored ball reappears at the muzzle with
+      // CANNON_LAUNCH speed along the barrel; empty cannons just cough a dud.
+      for (const p of parts) {
+        if (p.spec.type !== 'cannon') continue;
+        const cb = p.bodies[0], m = lab(cb), cm = m.cannon;
+        if (cm.cooldown > 0) cm.cooldown--;
+        if (cm.doorAnim > 0) cm.doorAnim--;
+        if (cm.fireAnim > 0) cm.fireAnim--;
+        const s = cannonSide(m);
+        if (!cm.loaded) {
+          for (const b of all) {
+            if (b.isStatic || b.isSensor || !b.circleRadius) continue;
+            const mb = lab(b);
+            if (!mb || mb.poppable || mb.buoyant || mb.swallowed) continue;
+            if (b.velocity.y < -0.5) continue; // rising bodies fly past, they don't "fall in"
+            const lx = b.position.x - cb.position.x, ly = b.position.y - cb.position.y;
+            if (Math.abs(lx + s * 18) > CANNON_MOUTH_HW || ly > -m.h / 2 + 4 || ly < -m.h / 2 - 36) continue;
+            // a ball on an uncut rope hangs — it can't drop into the hatch
+            if (parts.some(q => q.spec.type === 'rope'
+              && lab(q.bodies[0]).rope.attached === b && !lab(q.bodies[0]).rope.cut)) continue;
+            mb.swallowed = true;
+            Composite.remove(world, b);
+            cm.loaded = true; cm.ball = b; cm.doorAnim = 10;
+            state.events.push({ type: 'cannon_load', x: cb.position.x - s * 18, y: cb.position.y - m.h / 2, partId: m.id });
+            break;
+          }
+        }
+        if (!cm.fuseLit) continue;
+        cm.fuseT--;
+        if (cm.fuseT > 0) continue;
+        cm.fuseLit = false;
+        cm.cooldown = CANNON_COOLDOWN_FRAMES;
+        const mz = cannonMuzzle(cb);
+        if (cm.loaded && cm.ball) {
+          const ball = cm.ball, e = cannonElev(m);
+          const ux = Math.cos(e) * s, uy = -Math.sin(e);
+          lab(ball).swallowed = false;
+          Body.setPosition(ball, { x: mz.x + ux * (ball.circleRadius + 2), y: mz.y + uy * (ball.circleRadius + 2) });
+          Body.setVelocity(ball, { x: ux * CANNON_LAUNCH, y: uy * CANNON_LAUNCH });
+          Body.setAngularVelocity(ball, 0);
+          Composite.add(world, ball);
+          cm.loaded = false; cm.ball = null; cm.doorAnim = 10; cm.fireAnim = 14;
+          state.events.push({ type: 'cannon_fire', x: mz.x, y: mz.y, bodyId: ball.id, partId: m.id });
+        } else {
+          state.events.push({ type: 'cannon_dud', x: mz.x, y: mz.y, partId: m.id });
+        }
+      }
     }
 
     function checkGoal() {
@@ -1162,6 +1272,7 @@
         if (p.spec.type === 'hydrant' && lab(p.bodies[0]).hyd.active) return false;
         if (p.spec.type === 'laser' && lab(p.bodies[0]).laz.firing > 0) return false;
         if (p.spec.type === 'lens' && lab(p.bodies[0]).lens.firing > 0) return false;
+        if (p.spec.type === 'cannon' && lab(p.bodies[0]).cannon.fuseLit) return false;
       }
       let maxV = 0;
       for (const b of dynamicBodies()) {
