@@ -615,16 +615,16 @@
           }
         }
 
-        // Pressure plates are memory foam: whatever LANDS on one is absorbed
-        // dead instead of bouncing. Matter resolves each pair with the MAX
-        // restitution of the two bodies, so a bouncy ball would chatter the
-        // plate on/off (or ricochet clean off it) despite the plate's own
-        // restitution 0 — kill the fall and most of the roll on contact.
+        // Pressure plates are memory foam: whatever LANDS on one stops DEAD
+        // exactly where it fell — no bounce, no skid. (Matter resolves each
+        // pair with the MAX restitution of the two bodies, so a bouncy ball
+        // would chatter the plate on/off or ricochet clean off it despite
+        // the plate's own restitution 0.)
         for (const [sw, o] of [[a, b], [b, a]]) {
           if (lab(sw).type === 'switch' && !o.isStatic && !o.isSensor
             && o.velocity.y > 0.5 && o.position.y < sw.position.y) {
-            Body.setVelocity(o, { x: o.velocity.x * 0.4, y: 0 });
-            Body.setAngularVelocity(o, o.angularVelocity * 0.4);
+            Body.setVelocity(o, { x: 0, y: 0 });
+            Body.setAngularVelocity(o, 0);
           }
         }
 
@@ -978,10 +978,10 @@
         }
       }
 
-      // Pressure-plate foam, part two: it also swallows ROLLING. While a
-      // body touches a plate from above, brake it to a stop so it presses
-      // instead of rolling across and off (the collisionStart absorb only
-      // kills the landing; this kills the roll).
+      // Pressure-plate foam, part two: it also swallows ROLLING. Anything
+      // touching a plate from above has its roll and spin killed outright —
+      // it stops right where it touched (vy stays free, so a fist or cannon
+      // can still launch it straight up off the plate).
       const pairs = engine.pairs.list;
       for (const pair of pairs) {
         if (!pair.isActive) continue;
@@ -989,8 +989,8 @@
           const sm = lab(swb);
           if (sm && sm.type === 'switch' && !o.isStatic && !o.isSensor
             && o.position.y < swb.position.y) {
-            Body.setVelocity(o, { x: o.velocity.x * 0.82, y: o.velocity.y });
-            Body.setAngularVelocity(o, o.angularVelocity * 0.82);
+            Body.setVelocity(o, { x: 0, y: o.velocity.y });
+            Body.setAngularVelocity(o, 0);
           }
         }
       }
