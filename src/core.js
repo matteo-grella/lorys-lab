@@ -311,8 +311,8 @@
         break;
 
       case 'mirror':
-        // Rotatable 360°: the SHINY face (local "up") reflects laser/lens
-        // beams specularly (see castBeam); the wooden back just blocks them.
+        // Rotatable 360°, shiny on BOTH faces: reflects laser/lens beams
+        // specularly off whichever side is struck (see castBeam).
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.3 })));
         break;
 
@@ -1235,9 +1235,13 @@
           if (leg === 0) bz.beamLen = len; // painters read this for the muzzle glow
           const mb = hit && lab(hit);
           if (!mb || mb.type !== 'mirror') break;
-          const nx = Math.sin(hit.angle), ny = -Math.cos(hit.angle); // shiny-face normal
-          const dn = dx * nx + dy * ny;
-          if (dn >= 0) break;                    // wooden back: absorbed
+          // DOUBLE-SIDED glass: reflect off whichever face was struck (a
+          // one-sided mirror left half the rotation dial dead — hostile to
+          // kids twisting it to aim). Only a perfectly edge-on hit absorbs.
+          let nx = Math.sin(hit.angle), ny = -Math.cos(hit.angle);
+          let dn = dx * nx + dy * ny;
+          if (dn > 0) { nx = -nx; ny = -ny; dn = -dn; }
+          if (dn === 0) break;
           dx = dx - 2 * dn * nx; dy = dy - 2 * dn * ny;
           px = end.x + dx * 4; py = end.y + dy * 4; // step off the glass
           skipId = mb.id;

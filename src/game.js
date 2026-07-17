@@ -581,7 +581,7 @@
     bulb: 'Press its button to switch the light on and off — ⇄ moves the button. Shine it into a lens!',
     lens: 'It focuses light! Put it near a glowing bulb and out comes a laser beam.',
     cannon: 'Drop a ball in the top hatch — the door snaps shut! Light the back fuse with any flame and BOOM — one shot each, so make it count! ⟲⟳ aims the barrel, ⇄ turns it around.',
-    mirror: 'The shiny side bounces the laser beam somewhere new! Turn it to aim — the wooden back just blocks.',
+    mirror: 'Both sides are shiny! Turn it to bounce the laser beam somewhere new.',
     drawbridge: 'A castle bridge! It starts up like a wall — pull its cord and down it creaks into a road.',
     pullcord: 'A ring on a rope! Drop something onto the ring and it yanks the nearest drawbridge down.',
     basket: 'Swish! Get my basketball through the hoop from above — only basketballs count! ⇄ turns it around.',

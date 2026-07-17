@@ -928,9 +928,10 @@ function run(level, placements, seconds = 12, watch = null) {
     `ignite=${n2('ignite')} dud=${n2('cannon_dud')} settled=${dud.state.settled}`);
 }
 
-// 43. Mirror: the shiny face bounces the beam (specular), the wooden back
-//     absorbs it, two mirrors chain, and reflected legs carry the full
-//     beam powers (here: lighting a cold candle two bounces away).
+// 43. Mirror: DOUBLE-SIDED specular glass — both faces bounce the beam (a
+//     one-sided mirror left half the rotation dial dead), two mirrors
+//     chain, and reflected legs carry the full beam powers (here:
+//     lighting a cold candle two bounces away).
 {
   const mk = (extra) => ({
     goalType: 'pop',
@@ -946,10 +947,10 @@ function run(level, placements, seconds = 12, watch = null) {
   ]), [], { maxSeconds: 5, collectEvents: true });
   check('mirror bounces the beam 90° up — balloon around the corner pops', r1.won);
   const r2 = Core.simulate(mk([
-    { type: 'mirror', x: 500, y: 636, angle: 135 },   // wooden back to the beam
+    { type: 'mirror', x: 500, y: 636, angle: 135 },   // same tilt, OTHER face to the beam
     { type: 'balloon_goal', x: 500, y: 400 },
   ]), [], { maxSeconds: 5, collectEvents: true });
-  check('the wooden back absorbs the beam — balloon survives', !r2.won);
+  check('the other face reflects too (double-sided) — same balloon pops', r2.won);
   const r3 = Core.simulate(mk([
     { type: 'mirror', x: 500, y: 636, angle: -45 },
     { type: 'mirror', x: 500, y: 300, angle: 135 },
