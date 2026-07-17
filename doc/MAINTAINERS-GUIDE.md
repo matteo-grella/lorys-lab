@@ -102,7 +102,7 @@ lorys-lab/
 │                            path — the filename rotates when the artifact URL
 │                            has to be re-minted; check build.mjs for current)
 ├── test/
-│   ├── smoke.mjs            93 physics behaviour proofs (run in Node)
+│   ├── smoke.mjs            99 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   ├── puzzlecode.mjs       puzzle wire-format roundtrip + hostile-input proofs
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
@@ -224,7 +224,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `candle` | 26×58 | ✓ | ✓ (sandbox) | – | – | lit by default, `spec.lit:false` places it cold (editor 🔥/💨 toggle on the selected candle); flame tip ignites fuses/matches/cold candles, pops balloons, burns ropes and balloon strings; doused by water; relightable by any flame or laser |
 | `fuse` | 130×12 | ✓ sensor | ✓ (sandbox) | ✓ | – | bodies pass through; burns as interval [a,b] from ignition point both ways in ~2.5s (`FUSE_BURN_FRAMES 150`); fronts are flame points |
 | `hydrant` | 52×62 | ✓ | ✓ (sandbox) | – | right/left/up | sleepy like the magnet: a bump (relSpeed ≥ 1.6) opens the valve for `HYDRANT_ACTIVE_FRAMES 180` (~3s), or a wired switch drives it; while active the jet (reach 240, half-width 46) pushes EVERYTHING incl. berries (marbles reduced) and extinguishes flames. Events `water_on/water_off` drive the audio loop |
-| `switch` | 84×20 | ✓ | ✓ (sandbox) | – | – | pressure plate; wires to nearest fan/conveyor/magnet/hydrant/laser/bulb within 260px at sim start; device runs only while pressed (magnet: switch replaces bump/timer) |
+| `switch` | 84×20 | ✓ | ✓ (sandbox) | – | – | pressure plate; wires to nearest fan/conveyor/magnet/hydrant/laser/bulb within 260px at sim start; device runs only while pressed (magnet: switch replaces bump/timer). MEMORY FOAM: anything LANDING on the plate (falling, center above it) has its fall killed and roll/spin damped ×0.4 in collisionStart — Matter pairs resolve with MAX restitution, so bouncy balls used to chatter or ricochet clean off; plus a 5-frame release debounce (`sw.linger`) so an absorbed landing´s ~1px micro-hop never blips the plate |
 | `fist` | 66×46 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360°: punches along its facing at 15 px/f (`FIST_LAUNCH`, tangential velocity preserved), 60-frame cooldown. Two triggers: contact on the GLOVE side (local −y) punches the toucher; contact on the BACK plunger (local +y) fires remotely, launching everything in the muzzle zone (≤55px in front) — a pre-loadable cannon |
 | `match` | 12×54 | ✓ | ✓ (sandbox) | ✓ | – | strike-anywhere: a bump (relSpeed ≥ 1.6), any flame, or the laser flares the head (local −y end) into a real flame point for `MATCH_FLARE_FRAMES 150` (~2.5s), then it is spent for good; water also spends it. One-shot touch→fire converter |
 | `laser` | 44×56 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360° cannon (tray default `angle:90` — fires sideways): any touch fires the beam along local −y for `LASER_FIRE_FRAMES 30` (~0.5s, 50-frame re-arm); a wired switch holds the beam on instead. Beam (reach `LASER_REACH 420`, first solid body blocks it; sensors/balloons never do, and neither does anything pressed against the lens — the trigger ball must not eat its own shot) pops balloons, lights candles/matches, ignites fuses at the crossing point, burns ropes and tether strings (snip cause `'fire'`). Event `laser` on firing; renderer draws the beam from `lab.laz.beamLen` |
@@ -577,7 +577,7 @@ new total) before you build.
 Run everything from the project root:
 
 ```bash
-node test/smoke.mjs      # 93 physics behaviour proofs — every part & interaction
+node test/smoke.mjs      # 99 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
 node test/puzzlecode.mjs # puzzle wire-format roundtrip + hostile-input proofs
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext

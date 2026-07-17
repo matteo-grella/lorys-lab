@@ -455,7 +455,7 @@
 
       case 'switch':
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.6, restitution: 0 }),
-          { sw: { pressed: 0, target: null } }));
+          { sw: { pressed: 0, target: null, linger: 0 } }));
         break;
 
       case 'fist':
@@ -815,6 +815,19 @@
           }
         }
 
+        // Pressure plates are memory foam: whatever LANDS on one is absorbed
+        // dead instead of bouncing. Matter resolves each pair with the MAX
+        // restitution of the two bodies, so a bouncy ball would chatter the
+        // plate on/off (or ricochet clean off it) despite the plate's own
+        // restitution 0 — kill the fall and most of the roll on contact.
+        for (const [sw, o] of [[a, b], [b, a]]) {
+          if (lab(sw).type === 'switch' && !o.isStatic && !o.isSensor
+            && o.velocity.y > 0.5 && o.position.y < sw.position.y) {
+            Body.setVelocity(o, { x: o.velocity.x * 0.4, y: 0 });
+            Body.setAngularVelocity(o, o.angularVelocity * 0.4);
+          }
+        }
+
         // Magnet activation: any decent bump wakes a sleeping magnet
         // (and re-bumping an active one keeps it awake longer). Switch-wired
         // magnets ignore bumps — the switch decides.
@@ -1060,6 +1073,10 @@
           const other = pair.bodyA === swb ? pair.bodyB : pair.bodyB === swb ? pair.bodyA : null;
           if (other && !other.isStatic && !other.isSensor && other.position.y < swb.position.y) { pressed = true; break; }
         }
+        // debounce: an absorbed landing can micro-hop ~1px for a few frames —
+        // that must not blip the plate (and double-click its sound)
+        if (pressed) m.linger = 5;
+        else if (m.linger > 0) { m.linger--; pressed = true; }
         if (pressed !== !!m.pressedState) {
           m.pressedState = pressed;
           state.events.push({ type: pressed ? 'switch_on' : 'switch_off', x: swb.position.x, y: swb.position.y });

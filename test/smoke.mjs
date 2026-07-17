@@ -1073,6 +1073,52 @@ function run(level, placements, seconds = 12, watch = null) {
     humming.events.some(e => e.type === 'belt_on'));
 }
 
+// 47. Memory-foam pressure plate: whatever lands on it is absorbed dead —
+//     no bounce, no on/off chatter, regardless of the ball's material
+//     (Matter pairs resolve with MAX restitution, so a bouncy ball used to
+//     ricochet clean off the restitution-0 plate). Planks still bounce.
+{
+  for (const ball of ['ball_beach', 'ball_basket']) {   // the two bounciest
+    const sim = Core.createSim({
+      goalType: 'bell',
+      fixed: [
+        { type: 'switch', x: 450, y: 560 },
+        { type: ball, x: 450, y: 300 },
+        { type: 'bell', x: 1250, y: 60 },
+      ],
+    }, []);
+    const b = sim.parts.find(p => p.spec.type === ball).bodies[0];
+    let on = 0, off = 0;
+    for (let f = 0; f < 420; f++) {
+      for (const e of sim.step()) {
+        if (e.type === 'switch_on') on++;
+        if (e.type === 'switch_off') off++;
+      }
+    }
+    check(`${ball} lands dead on the plate: one press, no chatter, stays put`,
+      on === 1 && off === 0 && Math.abs(b.position.x - 450) < 8 && b.position.y < 545,
+      `on=${on} off=${off} rest=(${Math.round(b.position.x)},${Math.round(b.position.y)})`);
+  }
+  // absorption belongs to the plate alone: the same drop on a plank bounces
+  const sim2 = Core.createSim({
+    goalType: 'bell',
+    fixed: [
+      { type: 'plank', x: 450, y: 560 },
+      { type: 'ball_beach', x: 450, y: 300 },
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, []);
+  const b2 = sim2.parts.find(p => p.spec.type === 'ball_beach').bodies[0];
+  let landed = false, minY = 1e9;
+  for (let f = 0; f < 300; f++) {
+    sim2.step();
+    if (b2.position.y > 500) landed = true;
+    if (landed) minY = Math.min(minY, b2.position.y);
+  }
+  check('the same ball still bounces off a plank (absorption is plate-only)',
+    minY < 470, `rebound top y=${Math.round(minY)}`);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);
