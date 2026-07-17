@@ -1036,29 +1036,24 @@
 
     mirror(c, d) {
       const w = d.w, h = d.h;
-      // double-sided glass pane: BOTH faces are shiny and both reflect
-      const g = c.createLinearGradient(0, -h / 2, 0, h / 2);
-      g.addColorStop(0, '#E8F6FD'); g.addColorStop(0.5, C.sky); g.addColorStop(1, '#5FA8CC');
-      c.fillStyle = g; rr(c, -w / 2, -h / 2, w, h, 5); c.fill();
-      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -w / 2, -h / 2, w, h, 5); c.stroke();
-      // thin center spine so the pane reads as two faces
-      c.strokeStyle = 'rgba(53,99,184,0.4)'; c.lineWidth = 1.5;
-      c.beginPath(); c.moveTo(-w / 2 + 5, 0); c.lineTo(w / 2 - 5, 0); c.stroke();
-      // glints on BOTH faces
+      // wooden back (the absorbing side)
+      c.fillStyle = C.woodMid; rr(c, -w / 2, -2, w, h / 2 + 4, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -w / 2, -2, w, h / 2 + 4, 4); c.stroke();
+      // glass face on the local-up side (the shiny reflector)
+      const g = c.createLinearGradient(0, -h / 2, 0, 2);
+      g.addColorStop(0, '#E8F6FD'); g.addColorStop(0.6, C.sky); g.addColorStop(1, '#5FA8CC');
+      c.fillStyle = g; rr(c, -w / 2 + 1, -h / 2, w - 2, h / 2 + 3, 3); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -w / 2 + 1, -h / 2, w - 2, h / 2 + 3, 3); c.stroke();
+      // glints
       c.strokeStyle = 'rgba(255,249,238,0.85)'; c.lineWidth = 2; c.lineCap = 'round';
       c.beginPath();
-      c.moveTo(-w / 4 - 6, -1.5); c.lineTo(-w / 4 + 6, -h / 2 + 2);
-      c.moveTo(w / 6 - 5, -1.5); c.lineTo(w / 6 + 5, -h / 2 + 2);
-      c.moveTo(-w / 4 + 12, 1.5); c.lineTo(-w / 4 + 24, h / 2 - 2);
-      c.moveTo(w / 6 + 13, 1.5); c.lineTo(w / 6 + 25, h / 2 - 2);
+      c.moveTo(-w / 4 - 6, 0); c.lineTo(-w / 4 + 6, -h / 2 + 2);
+      c.moveTo(w / 6 - 5, 0); c.lineTo(w / 6 + 5, -h / 2 + 2);
       c.stroke();
-      // gold end caps
-      c.fillStyle = C.sunny;
-      rr(c, -w / 2 - 2, -h / 2 - 1, 7, h + 2, 3); c.fill();
-      rr(c, w / 2 - 5, -h / 2 - 1, 7, h + 2, 3); c.fill();
+      // frame caps
+      c.fillStyle = C.sunny; circle(c, -w / 2 + 3, 1, 3.5); c.fill(); circle(c, w / 2 - 3, 1, 3.5); c.fill();
       c.strokeStyle = C.outline; c.lineWidth = 1.2;
-      rr(c, -w / 2 - 2, -h / 2 - 1, 7, h + 2, 3); c.stroke();
-      rr(c, w / 2 - 5, -h / 2 - 1, 7, h + 2, 3); c.stroke();
+      circle(c, -w / 2 + 3, 1, 3.5); c.stroke(); circle(c, w / 2 - 3, 1, 3.5); c.stroke();
     },
 
     drawbridge(c, d) {

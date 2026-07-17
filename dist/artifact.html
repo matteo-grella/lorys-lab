@@ -511,8 +511,8 @@
         break;
 
       case 'mirror':
-        // Rotatable 360°, shiny on BOTH faces: reflects laser/lens beams
-        // specularly off whichever side is struck (see castBeam).
+        // Rotatable 360°: the SHINY face (local "up") reflects laser/lens
+        // beams specularly (see castBeam); the wooden back just blocks them.
         bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.3 })));
         break;
 
@@ -1435,13 +1435,9 @@
           if (leg === 0) bz.beamLen = len; // painters read this for the muzzle glow
           const mb = hit && lab(hit);
           if (!mb || mb.type !== 'mirror') break;
-          // DOUBLE-SIDED glass: reflect off whichever face was struck (a
-          // one-sided mirror left half the rotation dial dead — hostile to
-          // kids twisting it to aim). Only a perfectly edge-on hit absorbs.
-          let nx = Math.sin(hit.angle), ny = -Math.cos(hit.angle);
-          let dn = dx * nx + dy * ny;
-          if (dn > 0) { nx = -nx; ny = -ny; dn = -dn; }
-          if (dn === 0) break;
+          const nx = Math.sin(hit.angle), ny = -Math.cos(hit.angle); // shiny-face normal
+          const dn = dx * nx + dy * ny;
+          if (dn >= 0) break;                    // wooden back: absorbed
           dx = dx - 2 * dn * nx; dy = dy - 2 * dn * ny;
           px = end.x + dx * 4; py = end.y + dy * 4; // step off the glass
           skipId = mb.id;
@@ -5407,29 +5403,24 @@
 
     mirror(c, d) {
       const w = d.w, h = d.h;
-      // double-sided glass pane: BOTH faces are shiny and both reflect
-      const g = c.createLinearGradient(0, -h / 2, 0, h / 2);
-      g.addColorStop(0, '#E8F6FD'); g.addColorStop(0.5, C.sky); g.addColorStop(1, '#5FA8CC');
-      c.fillStyle = g; rr(c, -w / 2, -h / 2, w, h, 5); c.fill();
-      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -w / 2, -h / 2, w, h, 5); c.stroke();
-      // thin center spine so the pane reads as two faces
-      c.strokeStyle = 'rgba(53,99,184,0.4)'; c.lineWidth = 1.5;
-      c.beginPath(); c.moveTo(-w / 2 + 5, 0); c.lineTo(w / 2 - 5, 0); c.stroke();
-      // glints on BOTH faces
+      // wooden back (the absorbing side)
+      c.fillStyle = C.woodMid; rr(c, -w / 2, -2, w, h / 2 + 4, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -w / 2, -2, w, h / 2 + 4, 4); c.stroke();
+      // glass face on the local-up side (the shiny reflector)
+      const g = c.createLinearGradient(0, -h / 2, 0, 2);
+      g.addColorStop(0, '#E8F6FD'); g.addColorStop(0.6, C.sky); g.addColorStop(1, '#5FA8CC');
+      c.fillStyle = g; rr(c, -w / 2 + 1, -h / 2, w - 2, h / 2 + 3, 3); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -w / 2 + 1, -h / 2, w - 2, h / 2 + 3, 3); c.stroke();
+      // glints
       c.strokeStyle = 'rgba(255,249,238,0.85)'; c.lineWidth = 2; c.lineCap = 'round';
       c.beginPath();
-      c.moveTo(-w / 4 - 6, -1.5); c.lineTo(-w / 4 + 6, -h / 2 + 2);
-      c.moveTo(w / 6 - 5, -1.5); c.lineTo(w / 6 + 5, -h / 2 + 2);
-      c.moveTo(-w / 4 + 12, 1.5); c.lineTo(-w / 4 + 24, h / 2 - 2);
-      c.moveTo(w / 6 + 13, 1.5); c.lineTo(w / 6 + 25, h / 2 - 2);
+      c.moveTo(-w / 4 - 6, 0); c.lineTo(-w / 4 + 6, -h / 2 + 2);
+      c.moveTo(w / 6 - 5, 0); c.lineTo(w / 6 + 5, -h / 2 + 2);
       c.stroke();
-      // gold end caps
-      c.fillStyle = C.sunny;
-      rr(c, -w / 2 - 2, -h / 2 - 1, 7, h + 2, 3); c.fill();
-      rr(c, w / 2 - 5, -h / 2 - 1, 7, h + 2, 3); c.fill();
+      // frame caps
+      c.fillStyle = C.sunny; circle(c, -w / 2 + 3, 1, 3.5); c.fill(); circle(c, w / 2 - 3, 1, 3.5); c.fill();
       c.strokeStyle = C.outline; c.lineWidth = 1.2;
-      rr(c, -w / 2 - 2, -h / 2 - 1, 7, h + 2, 3); c.stroke();
-      rr(c, w / 2 - 5, -h / 2 - 1, 7, h + 2, 3); c.stroke();
+      circle(c, -w / 2 + 3, 1, 3.5); c.stroke(); circle(c, w / 2 - 3, 1, 3.5); c.stroke();
     },
 
     drawbridge(c, d) {
@@ -7104,7 +7095,7 @@
     bulb: 'Press its button to switch the light on and off — ⇄ moves the button. Shine it into a lens!',
     lens: 'It focuses light! Put it near a glowing bulb and out comes a laser beam.',
     cannon: 'Drop a ball in the top hatch — the door snaps shut! Light the back fuse with any flame and BOOM — one shot each, so make it count! ⟲⟳ aims the barrel, ⇄ turns it around.',
-    mirror: 'Both sides are shiny! Turn it to bounce the laser beam somewhere new.',
+    mirror: 'The shiny side bounces the laser beam somewhere new! Turn it to aim — the wooden back just blocks.',
     drawbridge: 'A castle bridge! It starts up like a wall — pull its cord and down it creaks into a road.',
     pullcord: 'A ring on a rope! Drop something onto the ring and it yanks the nearest drawbridge down.',
     basket: 'Swish! Get my basketball through the hoop from above — only basketballs count! ⇄ turns it around.',
