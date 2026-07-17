@@ -978,8 +978,24 @@
         }
       }
 
-      // Conveyor surface drive: steer contacting bodies toward belt speed.
+      // Pressure-plate foam, part two: it also swallows ROLLING. While a
+      // body touches a plate from above, brake it to a stop so it presses
+      // instead of rolling across and off (the collisionStart absorb only
+      // kills the landing; this kills the roll).
       const pairs = engine.pairs.list;
+      for (const pair of pairs) {
+        if (!pair.isActive) continue;
+        for (const [swb, o] of [[pair.bodyA, pair.bodyB], [pair.bodyB, pair.bodyA]]) {
+          const sm = lab(swb);
+          if (sm && sm.type === 'switch' && !o.isStatic && !o.isSensor
+            && o.position.y < swb.position.y) {
+            Body.setVelocity(o, { x: o.velocity.x * 0.82, y: o.velocity.y });
+            Body.setAngularVelocity(o, o.angularVelocity * 0.82);
+          }
+        }
+      }
+
+      // Conveyor surface drive: steer contacting bodies toward belt speed.
       for (const pair of pairs) {
         if (!pair.isActive) continue;
         const la = lab(pair.bodyA), lb = lab(pair.bodyB);

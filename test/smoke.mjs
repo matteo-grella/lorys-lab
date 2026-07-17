@@ -1117,6 +1117,33 @@ function run(level, placements, seconds = 12, watch = null) {
   }
   check('the same ball still bounces off a plank (absorption is plate-only)',
     minY < 470, `rebound top y=${Math.round(minY)}`);
+
+  // the foam also swallows ROLLING: a marble speeding along the floor is
+  // caught at the plate and presses it — without the plate it rolls far past
+  const roll = (withPlate) => {
+    const fixed = [
+      { type: 'shelf', x: 260, y: 560, w: 280, h: 24, angle: 18 },
+      { type: 'ball_marble', x: 150, y: 480 },
+      { type: 'bell', x: 1250, y: 60 },
+    ];
+    if (withPlate) fixed.push({ type: 'switch', x: 560, y: 680 });
+    const sim = Core.createSim({ goalType: 'bell', fixed }, []);
+    const b = sim.parts.find(p => p.spec.type === 'ball_marble').bodies[0];
+    let on = 0, off = 0;
+    for (let f = 0; f < 480; f++) {
+      for (const e of sim.step()) {
+        if (e.type === 'switch_on') on++;
+        if (e.type === 'switch_off') off++;
+      }
+    }
+    return { x: b.position.x, on, off };
+  };
+  const caught = roll(true), free = roll(false);
+  check('a rolling marble is caught at the plate and presses it for good',
+    caught.on === 1 && caught.off === 0 && caught.x < 560,
+    `caught at x=${Math.round(caught.x)} on=${caught.on} off=${caught.off}`);
+  check('without the plate the same marble rolls far past (the plate did it)',
+    free.x > 700, `rolled to x=${Math.round(free.x)}`);
 }
 
 const fails = results.filter(r => !r.pass);
