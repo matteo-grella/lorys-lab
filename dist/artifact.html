@@ -5947,11 +5947,14 @@
     if (type === 'drawbridge') {
       c.save(); c.translate(spec.x, spec.y); painters.bridgeBase(c); c.restore();
     }
-    // rope line: braided cord from the anchor hook to the hanging body
+    // rope line: braided cord from the anchor hook to the hanging body.
+    // Puzzle-maker: a plucked anchor fades its cord along with itself.
     if (type === 'rope' && m.rope && m.rope.attached && !m.rope.cut) {
       const ax = body.position.x, ay = body.position.y + m.h / 2 + 3;
       const bx2 = m.rope.attached.position.x, by2 = m.rope.attached.position.y;
       c.save();
+      const att = m.rope.attached.plugin.lab;
+      if (spec._plucked || (att && att.spec && att.spec._plucked)) c.globalAlpha = 0.35;
       for (const [col, lw] of [[C.woodDark, 4.5], [C.tangerine, 1.8]]) {
         c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
         c.beginPath();
@@ -5965,9 +5968,10 @@
       }
       c.restore();
     }
-    // balloon strings
+    // balloon strings (fade with a plucked balloon in the puzzle maker)
     if ((type === 'balloon' || type === 'balloon_goal')) {
       c.save();
+      if (spec._plucked) c.globalAlpha = 0.35;
       c.strokeStyle = C.inkSoft; c.lineWidth = 1.5;
       const bx = body.position.x, by = body.position.y + (PART_R(spec) || 22);
       let ex, ey;
@@ -6049,6 +6053,8 @@
       if (!m.target || !byId[m.target]) continue;
       const a = p.bodies[0].position, b = byId[m.target].bodies[0].position;
       c.save();
+      // puzzle-maker: the wire fades along with a plucked endpoint
+      if (p.spec._plucked || byId[m.target].spec._plucked) c.globalAlpha = 0.35;
       c.strokeStyle = m.pressedState ? C.leaf : C.inkSoft;
       c.lineWidth = 2.5;
       c.setLineDash(m.pressedState ? [] : [6, 5]);
@@ -6084,10 +6090,12 @@
       const a = p.bodies[0].position;
       const slack = cm.pulled || bm.bridge.down;
       const sag = slack ? 48 : 12;
+      // puzzle-maker: the rope fades along with a plucked cord or bridge
+      const fade = p.spec._plucked || byId[cm.target].spec._plucked ? 0.35 : 1;
       c.save();
       for (const [col, lw] of [[C.woodDark, 3.5], [C.tangerine, 1.4]]) {
         c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
-        c.globalAlpha = slack ? 0.6 : 1;
+        c.globalAlpha = (slack ? 0.6 : 1) * fade;
         c.beginPath();
         c.moveTo(a.x, a.y + 6);
         c.quadraticCurveTo((a.x + tip.x) / 2, Math.max(a.y, tip.y) + sag, tip.x, tip.y - 4);
