@@ -75,12 +75,12 @@ lists go in the part's guide table row.
 - **beam crossing** (`distPointSeg < 20`): candle/match/fuse via `castBeam`
 - **drop-zone** (center inside a zone + a falling-velocity gate): cannon
   hatch, pullcord ring — per-frame check in `applyBehaviours`, no sensor body
-- **always-on with optional initial state** (`spec.on !== false`): fan
+- **always-on with optional initial state** (`spec.on !== false`): fan, conveyor
 
 ### 1.4 State vocabulary
 - one-shot & spent (match, cannon, pullcord) · timed burst (hydrant, magnet, laser)
 - toggle (bulb) · powered-while (all switch loads)
-- **author-settable initial state**: candle `lit`, fan `on`. ⚠️ Each such
+- **author-settable initial state**: candle `lit`, fan/conveyor `on`. ⚠️ Each such
   boolean consumes one wire-format "extra" slot and parts have AT MOST TWO,
   one per kind (dir string, angle number, `false` flag). dir + angle fits —
   the cannon does exactly that (its "angle" is barrel elevation, the body

@@ -904,6 +904,17 @@
             Body.applyForce(b, b.position, { x: dv.x * mag, y: dv.y * mag });
           }
         }
+        if (spec.type === 'conveyor') {
+          // spec.on === false places the belt stopped: only a wired switch
+          // can run it. Effective-running changes drive the hum via
+          // belt_on/belt_off events (fan pattern).
+          const m = lab(p.bodies[0]);
+          const running = m.switchControlled ? !!m.poweredNow : spec.on !== false;
+          if (running !== !!m.beltWas) {
+            m.beltWas = running;
+            state.events.push({ type: running ? 'belt_on' : 'belt_off', x: p.bodies[0].position.x, y: p.bodies[0].position.y });
+          }
+        }
         if (spec.type === 'magnet') {
           const mg = p.bodies[0];
           const meta = lab(mg);
@@ -957,7 +968,7 @@
         const la = lab(pair.bodyA), lb = lab(pair.bodyB);
         for (const [belt, o] of [[la, pair.bodyB], [lb, pair.bodyA]]) {
           if (belt && belt.type === 'conveyor' && !o.isStatic
-            && !(belt.switchControlled && !belt.poweredNow)) {
+            && !(belt.switchControlled ? !belt.poweredNow : belt.spec.on === false)) {
             const target = (belt.dir === 'left' ? -1 : 1) * CONVEYOR_SPEED;
             const dvx = target - o.velocity.x;
             Body.setVelocity(o, { x: o.velocity.x + Math.max(-0.4, Math.min(0.4, dvx)), y: o.velocity.y });
@@ -1533,14 +1544,18 @@
   // Puzzle wire format — share links, .lorypuzzle files, the community shelf.
   // `LORY1.<base64url(deflate-raw(json))>`, or `LORY0.<base64url(json)>` when
   // CompressionStream is unavailable. The json payload:
-  //   { v:1, name, by?, fixed:[[type,x,y,...extras],...], plucked:[[...],...] }
+  //   { v:1|2, name, by?, goal?, fixed:[[type,x,y,...extras],...], plucked:[[...],...] }
+  // goal is 'bell' or 'basket' (absent = the classic berry-into-bowl catch);
+  // a goal-bearing puzzle encodes as v:2 ON PURPOSE so older games say
+  // "needs a newer Lory's Lab" instead of mis-running it as catch — plain
+  // catch puzzles keep encoding as v:1 and stay openable everywhere.
   // Up to TWO extras, at most one of each kind: number = angle (rot parts),
   // string = dir (dir parts, default omitted), false = starts off (cold
   // candle, stopped fan). Decoding trusts NOTHING: every field is validated
   // and copied into fresh objects, so no foreign key (e.g. __proto__) ever
   // reaches game state.
   // ---------------------------------------------------------------------------
-  const PUZZLE_FORMAT_V = 1;
+  const PUZZLE_FORMAT_V = 2;      // highest payload version we understand
   const PUZZLE_MAX_PARTS = 100;   // perf guard: no puzzle needs more
   const PUZZLE_MAX_CODE = 20000;  // chars, before any decoding
   const PUZZLE_MAX_JSON = 262144; // bytes after inflate (zip-bomb guard)
@@ -1607,7 +1622,7 @@
         spec.dir = extra;
       } else if (extra === false && type === 'candle' && spec.lit === undefined) {
         spec.lit = false;
-      } else if (extra === false && type === 'fan' && spec.on === undefined) {
+      } else if (extra === false && (type === 'fan' || type === 'conveyor') && spec.on === undefined) {
         spec.on = false;
       } else throw new Error('bad-data');
     }
@@ -1627,7 +1642,7 @@
       if (a) out.push(a);
     }
     if ((spec.type === 'candle' && spec.lit === false)
-      || (spec.type === 'fan' && spec.on === false)) out.push(false);
+      || ((spec.type === 'fan' || spec.type === 'conveyor') && spec.on === false)) out.push(false);
     return out;
   }
   function puzzleTuple(spec) {
@@ -1642,6 +1657,10 @@
     if (!p || typeof p !== 'object') throw new Error('bad-data');
     const name = stripText(p.name, 24) || 'Puzzle';
     const by = stripText(p.by, 12);
+    // goal: absent/'catch' = classic berry-into-bowl; 'bell'/'basket' are the
+    // alternate endings. Anything else is not a puzzle we understand.
+    let goal = p.goal == null || p.goal === 'catch' ? null : p.goal;
+    if (goal !== null && goal !== 'bell' && goal !== 'basket') throw new Error('bad-data');
     const rows = { fixed: [], plucked: [] };
     for (const key of ['fixed', 'plucked']) {
       const arr = p[key];
@@ -1658,15 +1677,23 @@
     const all = rows.fixed.concat(rows.plucked);
     if (all.length > PUZZLE_MAX_PARTS) throw new Error('bad-data');
     if (!rows.plucked.length) throw new Error('bad-data');           // no tray = not a puzzle
-    if (!all.some(s => s.type === 'berry') || !all.some(s => s.type === 'bowl'))
-      throw new Error('bad-data');                                    // the catch goal needs both
-    return { name, by, fixed: rows.fixed, plucked: rows.plucked };
+    // every ending needs its parts on the table
+    const has = t => all.some(s => s.type === t);
+    if (goal === 'bell') { if (!has('bell')) throw new Error('bad-data'); }
+    else if (goal === 'basket') { if (!has('basket') || !has('ball_basket')) throw new Error('bad-data'); }
+    else if (!has('berry') || !has('bowl')) throw new Error('bad-data'); // catch needs both
+    const out = { name, by, fixed: rows.fixed, plucked: rows.plucked };
+    if (goal) out.goal = goal;
+    return out;
   }
 
   async function puzzleEncode(p) {
     const clean = puzzleSanitize(p);
-    const payload = { v: PUZZLE_FORMAT_V, name: clean.name };
+    // catch puzzles stay v:1 (openable by every game version); a goal-bearing
+    // puzzle is v:2 so old versions ask for an update instead of mis-running it
+    const payload = { v: clean.goal ? 2 : 1, name: clean.name };
     if (clean.by) payload.by = clean.by;
+    if (clean.goal) payload.goal = clean.goal;
     payload.fixed = clean.fixed.map(puzzleTuple);
     payload.plucked = clean.plucked.map(puzzleTuple);
     const bytes = new TextEncoder().encode(JSON.stringify(payload));
@@ -1689,14 +1716,16 @@
     if (bytes.length > PUZZLE_MAX_JSON) throw new Error('bad-format');
     let payload;
     try { payload = JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { throw new Error('bad-format'); }
-    if (!payload || typeof payload !== 'object' || payload.v !== PUZZLE_FORMAT_V) throw new Error('newer-version');
+    if (!payload || typeof payload !== 'object'
+      || !Number.isInteger(payload.v) || payload.v < 1 || payload.v > PUZZLE_FORMAT_V) throw new Error('newer-version');
     return puzzleSanitize(payload);
   }
 
-  // Stable identity for import dedupe: same name+author+layout = same puzzle.
+  // Stable identity for import dedupe: same name+author+goal+layout = same puzzle.
   function puzzleCanonical(p) {
     const clean = puzzleSanitize(p);
-    return JSON.stringify([clean.name, clean.by, clean.fixed.map(puzzleTuple), clean.plucked.map(puzzleTuple)]);
+    return JSON.stringify([clean.name, clean.by, clean.goal || 'catch',
+      clean.fixed.map(puzzleTuple), clean.plucked.map(puzzleTuple)]);
   }
 
   const puzzleCode = {

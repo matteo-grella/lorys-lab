@@ -645,6 +645,8 @@
         case 'water_off': stopLoop('water'); break;
         case 'fan_on': startLoop('fan'); break;
         case 'fan_off': stopLoop('fan'); break;
+        case 'belt_on': startLoop('conveyor'); break;
+        case 'belt_off': stopLoop('conveyor'); break;
       }
     }
   }

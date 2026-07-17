@@ -380,8 +380,10 @@
       c.restore();
     },
 
-    conveyor(c, d, a, o) {
+    conveyor(c, d, a, o, body) {
       const w = d.w, h = d.h, dir = d.dir === 'left' ? -1 : 1;
+      const m = body && body.plugin.lab;
+      const stopped = m ? (m.switchControlled ? !m.poweredNow : m.spec.on === false) : false;
       const off = a ? a.dash : 0;
       c.fillStyle = C.woodMid; rr(c, -w / 2, -h / 2, w, h, h / 2); c.fill();
       c.strokeStyle = C.woodDark; c.lineWidth = 8; rr(c, -w / 2 + 4, -h / 2 + 4, w - 8, h - 8, (h - 8) / 2); c.stroke();
@@ -402,8 +404,8 @@
         c.beginPath(); c.moveTo(-h / 2 + 5, 0); c.lineTo(h / 2 - 5, 0); c.stroke();
         c.fillStyle = C.woodMid; circle(c, 0, 0, 3.5); c.fill(); c.restore();
       }
-      // direction arrows
-      c.fillStyle = C.paper;
+      // direction arrows (dimmed while the belt is stopped — no hidden state)
+      c.fillStyle = stopped ? 'rgba(255,249,238,0.35)' : C.paper;
       for (const s of [-0.22, 0.1]) {
         c.beginPath();
         c.moveTo(s * w * dir, -1); c.lineTo((s * w + 8 * 1) * dir, -1 + 3.5); c.lineTo(s * w * dir, 6); // arrowhead
@@ -1537,7 +1539,11 @@
         const off = m.switchControlled ? !m.poweredNow : p.spec.on === false;
         a.spin += ((running && !off) ? 9.4 : 0.9) * dt * TAU / 2;
       }
-      if (type === 'conveyor') a.dash += (running ? 3.2 : 0) * 60 * dt;
+      if (type === 'conveyor') {
+        const m = p.bodies[0].plugin.lab;
+        const off = m.switchControlled ? !m.poweredNow : p.spec.on === false;
+        a.dash += ((running && !off) ? 3.2 : 0) * 60 * dt;
+      }
       if (type === 'trampoline') {
         a.matDip = (a.matDip || 0) + ((a.matDipV || 0) - (a.matDip || 0)) * 0.5;
         a.matDipV = (a.matDipV || 0) * 0.72;
@@ -1873,7 +1879,7 @@
     // candles start lit or cold, fans start running or stopped — the button
     // icon shows what tapping DOES
     if (sel.type === 'candle') defsBtns.push({ id: 'lit', icon: sel.lit === false ? '🔥' : '💨', col: C.tangerine });
-    if (sel.type === 'fan') defsBtns.push({ id: 'lit', icon: sel.on === false ? '▶' : '⏸', col: C.tangerine });
+    if (sel.type === 'fan' || sel.type === 'conveyor') defsBtns.push({ id: 'lit', icon: sel.on === false ? '▶' : '⏸', col: C.tangerine });
     // sandbox puzzle marks: 🧩 sends the part to the player's tray, 📌 pins it
     // back into the scene (the escape hatch for editing a saved puzzle).
     // Sparkles are author-only scenery — never tray pieces.

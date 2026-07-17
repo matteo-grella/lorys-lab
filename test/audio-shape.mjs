@@ -50,6 +50,8 @@ A.handleEvents([
   { type: 'bridge_down' },
   { type: 'bridge_landed' },
   { type: 'basket' },
+  { type: 'belt_on' },
+  { type: 'belt_off' },
   { type: 'unknown_event' },
   null,
 ]);

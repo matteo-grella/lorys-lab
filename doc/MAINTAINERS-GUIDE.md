@@ -142,7 +142,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 |---|---|---|
 | core | game | `createSim(levelDef, placements)` → sim object; `sim.step()` → events array; `sim.state` flags; `PART_DEFS`; `placementOverlaps(sim, spec)`; `simulate(levelDef, placements, opts)` (headless); `puzzleCode.{encode,decode,canonical}` (puzzle sharing, async) |
 | core | render | each Matter body carries `body.plugin.lab` metadata (`type,id,w,h,r,dir,spec,...`); event objects for FX |
-| core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off, laser, bulb_on/off, fan_on/off, cannon_load, cannon_fire, cannon_dud, cord_pull, bridge_down, bridge_landed, basket` |
+| core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off, laser, bulb_on/off, fan_on/off, cannon_load, cannon_fire, cannon_dud, cord_pull, bridge_down, bridge_landed, basket, belt_on/off` |
 | render | game | `R.draw(frame)` returns `{selButtons, wells, bubbleClose}` hit-regions the input code uses next frame |
 | levels | game/tests | array of level objects (schema in §5) |
 
@@ -213,7 +213,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `fan` | 56×56 | ✓ | ✓ | – | right/left/up | wind field, see 4.2. `spec.on:false` places it stopped (editor ⏸/▶ toggle): only a wired switch runs it then; a wired switch always takes over either way |
 | `magnet` | 56×56 | ✓ | ✓ | – | – | sleepy magnet, see 4.2 |
 | `domino` | 16×56 | dynamic | ✓ | – | – | chain element |
-| `conveyor` | 140×26 | ✓ | ✓ | – | right/left | surface drive, see 4.2 |
+| `conveyor` | 140×26 | ✓ | ✓ | – | right/left | surface drive, see 4.2; `spec.on:false` places it stopped (editor ⏸/▶ toggle, `false` wire extra) — only a wired switch runs it then; effective running state emits `belt_on/belt_off` (event-driven hum, fan pattern), renderer freezes the dashes + dims the arrows |
 | `bumper` | r 26 | ✓ | ✓ | – | – | restitution 1.0 |
 | `balloon` | r 24 | dynamic | ✓ | – | – | buoyant, pops ONLY on spikes |
 | `bucket` | 120×90 | ✓ | ✓ | – | – | compound: solid open-top catcher |
@@ -420,6 +420,7 @@ The game forwards them to `LoryAudio.handleEvents()` and
 | `laser` | x, y | cannon OR lens starts firing (touch burst, switch edge, light feed) | audio (PEW zap), render (ring + stars); the beam itself is drawn from `lab.laz.beamLen`/`lab.lens.beamLen`, not the event |
 | `bulb_on` / `bulb_off` | x, y | bulb toggled (button press or wired switch) | audio (switch clicks), render (sunny ring / poof) |
 | `fan_on` / `fan_off` | x, y | a fan's effective running state changed (start, switch press/release, spec.on) | audio (hum loop start/stop); render: deliberately none — the blades are the visual |
+| `belt_on` / `belt_off` | x, y | a conveyor's effective running state changed (same triple as the fan) | audio (motor loop start/stop); render: deliberately none — moving dashes + arrow dim read the state directly |
 | `cannon_load` | x, y, partId | a roller dropped into the hatch; door shuts | audio (wood clap + latch), render (sunny ring + poof); door/lid pose read from `lab.cannon.loaded/doorAnim` |
 | `cannon_fire` | x, y, bodyId, partId | fuse burned down on a loaded cannon; ball launched from the muzzle, cannon spent (`lab.cannon.dead`) | audio (BOOM + half-depth music duck), render (big poof/ring/stars + flame flecks); recoil + muzzle flash read `lab.cannon.fireAnim` |
 | `cannon_dud` | x, y, partId | fuse burned down on an EMPTY cannon — also spends it | audio (sad pfff), render (poof); the ignite/extinguish events are reused for its fuse |
@@ -903,18 +904,26 @@ silently. All shapes are defaulted on load — never assume fields exist.
   fixed-only parts); no "try again" stuck flow, but the run auto-stops back
   to edit after ~1.5 s of stillness (§4.4); win events celebrate (confetti +
   reset of `won/caughtFrames/bellRung`) but never end the run.
-- **Puzzle maker**: `S.pluckMode`. Flow: validate berry+bowl exist → taps
+- **Puzzle maker**: `S.pluckMode`. Flow: validate that at least one ENDING
+  is buildable (`puzzleViableGoals`: catch needs berry+bowl, bell needs a
+  bell, basket needs basket+ball_basket — the `PUZZLE_GOALS` table) → taps
   toggle `spec._plucked` → 💾 opens the name dialog (Enter=save, Esc=cancel,
-  re-open guarded) → `savePuzzle()` splits placements into
+  re-open guarded). The ending is AUTOMATIC by priority of what's in the
+  scene — bowl+berry beats bell beats basket (PUZZLE_GOALS declaration
+  order; a scene with all three is a catch puzzle) — and the dialog shows
+  it as a read-only "Ending:" line →
+  `savePuzzle()` splits placements into
   `fixed` (unmarked) / `plucked` (marked, becomes the tray), strips the
-  `_plucked` flags, saves. `S.editingPuzzleId` set ⇒ update-in-place +
+  `_plucked` flags, saves (`goal` stored on the record only when ≠ catch).
+  `S.editingPuzzleId` set ⇒ update-in-place +
   clear that puzzle's win. `editPuzzleInSandbox(p)` restores the scene
   (plucked parts re-marked) and deducts stock. Marks are also editable
   outside pluck mode via the selection 🧩/📌 button. ✕ (exit pluck mode)
   wipes marks only for a never-saved session — while editing a saved
   puzzle (`editingPuzzleId` set) it keeps them.
 - **Playing a user puzzle**: `S.puzzle` set ⇒ `currentLevel()` synthesizes a
-  def: goal always `catch`, tray derived by grouping `plucked` by type,
+  def: goal = `puzzle.goal || 'catch'` (goalText/icon from `PUZZLE_GOALS`;
+  the level-select card shows the ending's icon), tray derived by grouping `plucked` by type,
   `solution` = the author's `plucked` placements (powers hints), no
   sparkles from `level.sparkles` (author-placed sparkle PARTS ride along in
   `fixed` and count normally — the star chip shows and the win overlay
@@ -923,12 +932,17 @@ silently. All shapes are defaulted on load — never assume fields exist.
   shows the custom "You fed Lory!" overlay (🧩 badge when starless).
 - **Puzzle sharing** (`core.js puzzleCode` + game.js): wire format
   `LORY1.<base64url(deflate-raw(json))>` (`LORY0.` = uncompressed fallback);
-  payload `{v, name, by?, fixed:[[type,x,y,…extras]…], plucked:[…]}` with up
+  payload `{v, name, by?, goal?, fixed:[[type,x,y,…extras]…], plucked:[…]}` with up
   to TWO extras, one per kind: number=angle / string=dir (default omitted) /
-  false=starts off (cold candle, stopped fan). `decode()` validates EVERYTHING into fresh objects (unknown part or
+  false=starts off (cold candle, stopped fan). `goal` ('bell'|'basket',
+  absent = catch) rides a `v:2` payload ON PURPOSE — old games say
+  `newer-version` instead of mis-running it as catch; catch puzzles keep
+  encoding `v:1` and stay openable everywhere. `decode()` validates EVERYTHING into fresh objects (unknown part or
   future `v` → `newer-version`; bounds/caps/shape errors → `bad-data`;
-  ≥1 berry+bowl and ≥1 plucked required; ≤100 parts; inflate capped —
-  zip-bomb guard). Share paths: per-card 📤 dialog (native share / copy link
+  the chosen ending's parts (berry+bowl / bell / basket+ball_basket) and
+  ≥1 plucked required; ≤100 parts; inflate capped —
+  zip-bomb guard). `canonical` includes the goal (same layout, different
+  ending = different puzzle). Share paths: per-card 📤 dialog (native share / copy link
   / `.lorypuzzle` file), 📥 file import (regex-scans any text for codes, max
   200), 📦 backup-all (one file, `#`-comment headers). Links carry
   `#pz=<code>`; boot + `hashchange` call `checkSharedPuzzle()` → offer

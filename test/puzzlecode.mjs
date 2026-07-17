@@ -38,6 +38,7 @@ const GOOD = {
     { type: 'mirror', x: 450, y: 300, angle: 30 },
     { type: 'basket', x: 640, y: 300, dir: 'left' },
     { type: 'ball_basket', x: 500, y: 300 },
+    { type: 'conveyor', x: 300, y: 200, dir: 'left', on: false }, // TWO extras: dir + off
   ],
 };
 
@@ -48,7 +49,10 @@ const GOOD = {
   check('code is URL-safe', /^LORY\d+\.[A-Za-z0-9\-_]+$/.test(code), `${code.length} chars`);
   const back = await PC.decode(code);
   check('name/by survive', back.name === GOOD.name && back.by === 'L.');
-  check('part counts survive', back.fixed.length === 7 && back.plucked.length === 7);
+  check('part counts survive', back.fixed.length === 7 && back.plucked.length === 8);
+  const belt = back.plucked.find(s => s.type === 'conveyor');
+  check('two extras survive (stopped belt keeps dir AND on:false)',
+    belt.dir === 'left' && belt.on === false);
   const offFan = back.plucked.find(s => s.type === 'fan');
   check('two extras survive (stopped fan keeps dir AND on:false)',
     offFan.dir === 'left' && offFan.on === false);
@@ -100,7 +104,11 @@ await rejects('corrupt deflate stream', 'LORY1.AAAAAAAA', 'bad-format');
 {
   const mk = async (payload) => 'LORY0.' + Buffer.from(JSON.stringify(payload)).toString('base64url');
   const base = { v: 1, name: 'x', fixed: [['berry', 100, 100], ['bowl', 900, 655]], plucked: [['plank', 400, 500]] };
-  await rejects('payload v:2', await mk(Object.assign({}, base, { v: 2 })), 'newer-version');
+  await rejects('payload v:3', await mk(Object.assign({}, base, { v: 3 })), 'newer-version');
+  {
+    const v2 = await PC.decode(await mk(Object.assign({}, base, { v: 2 })));
+    check('payload v:2 accepted (goal-era envelope)', v2.plucked.length === 1);
+  }
   await rejects('unknown part type', await mk(Object.assign({}, base, { plucked: [['tnt', 400, 500]] })), 'newer-version');
   await rejects('__proto__ as part type', await mk(Object.assign({}, base, { plucked: [['__proto__', 400, 500]] })), 'newer-version');
   // sparkles are legal puzzle content (placeable in the sandbox as of SW v21)
@@ -123,6 +131,41 @@ await rejects('corrupt deflate stream', 'LORY1.AAAAAAAA', 'bad-format');
   await rejects('missing bowl', await mk({ v: 1, name: 'x', fixed: [['berry', 100, 100]], plucked: [['plank', 400, 500]] }), 'bad-data');
   const many = { v: 1, name: 'x', fixed: [['berry', 100, 100], ['bowl', 900, 655]], plucked: Array.from({ length: 101 }, () => ['domino', 400, 500]) };
   await rejects('over the part cap', await mk(many), 'bad-data');
+}
+
+// 4b. goal endings: bell/basket puzzles carry `goal`, need their own parts
+//     (and NOT berry/bowl), and classic catch stays a v1 payload so every
+//     old game version can still open it.
+{
+  const bellPz = {
+    name: 'Ding', goal: 'bell',
+    fixed: [{ type: 'bell', x: 600, y: 200 }, { type: 'shelf', x: 300, y: 300 }],
+    plucked: [{ type: 'plank', x: 400, y: 500 }],
+  };
+  const back = await PC.decode(await PC.encode(bellPz));
+  check('bell-goal puzzle roundtrips without berry/bowl', back.goal === 'bell' && back.fixed.length === 2);
+  const basketPz = {
+    name: 'Swish', goal: 'basket',
+    fixed: [{ type: 'basket', x: 600, y: 300 }],
+    plucked: [{ type: 'ball_basket', x: 500, y: 200 }],
+  };
+  const back2 = await PC.decode(await PC.encode(basketPz));
+  check('basket-goal puzzle roundtrips (the ball may live in the tray)', back2.goal === 'basket');
+  check('catch keeps goal off the wire (v1 payload — old games open it)',
+    (await PC.decode(await PC.encode(GOOD))).goal === undefined);
+  const both = {
+    name: 'x',
+    fixed: [{ type: 'berry', x: 100, y: 100 }, { type: 'bowl', x: 900, y: 655 }, { type: 'bell', x: 600, y: 200 }],
+    plucked: [{ type: 'plank', x: 400, y: 500 }],
+  };
+  check('canonical tells endings apart (same layout, different goal)',
+    PC.canonical(both) !== PC.canonical(Object.assign({}, both, { goal: 'bell' })));
+  await rejects('bell goal without a bell',
+    { name: 'x', goal: 'bell', fixed: [{ type: 'berry', x: 100, y: 100 }, { type: 'bowl', x: 900, y: 655 }], plucked: [{ type: 'plank', x: 400, y: 500 }] }, 'bad-data');
+  await rejects('basket goal without the basketball',
+    { name: 'x', goal: 'basket', fixed: [{ type: 'basket', x: 600, y: 300 }], plucked: [{ type: 'plank', x: 400, y: 500 }] }, 'bad-data');
+  await rejects('made-up goal',
+    { name: 'x', goal: 'soccer', fixed: [{ type: 'berry', x: 100, y: 100 }, { type: 'bowl', x: 900, y: 655 }], plucked: [{ type: 'plank', x: 400, y: 500 }] }, 'bad-data');
 }
 
 // 5. name/author hygiene: control chars stripped, lengths capped

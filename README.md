@@ -39,8 +39,9 @@ self-contained file.
   player should place (they fade into the future tray), press 💾 and name it.
   Saved puzzles persist and appear under "My puzzles" in the level select,
   where they can be replayed, edited (✎ reopens the scene in the sandbox and
-  💾 updates it in place), or deleted; the goal is always feeding Lory
-  (berry + bowl required).
+  💾 updates it in place), or deleted. Pick the puzzle's ending when saving:
+  feed Lory (berry + bowl), ring the bell, or score a basket (basketball
+  required — hoops only count basketballs).
 - **Cartoon speed effects** on rolling balls — motion trails, exaggerated
   spin, lean, dust puffs. Pure rendering; physics and solutions untouched.
 - **Start fresh**: a reset button on the title screen erases all stars,

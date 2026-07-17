@@ -1042,6 +1042,37 @@ function run(level, placements, seconds = 12, watch = null) {
   check('cannon three-pointer: lobbed basketball banks in — win', r3.won, `t=${r3.seconds}s`);
 }
 
+// 46. Conveyor initial state: spec.on === false places the belt stopped —
+//     it carries nothing and hums nothing — and a wired pressure plate
+//     runs it while (and only while) something sits on the plate.
+{
+  const stopped = Core.simulate({
+    goalType: 'catch',
+    fixed: [{ type: 'berry', x: 400, y: 300 }, { type: 'bowl', x: 650, y: 640 }],
+  }, [{ type: 'conveyor', x: 450, y: 380, dir: 'right', on: false }], { maxSeconds: 8, collectEvents: true });
+  check('stopped belt (spec.on:false) carries nothing and settles',
+    !stopped.won && stopped.settled && !stopped.events.some(e => e.type === 'belt_on'));
+
+  const wired = Core.simulate({
+    goalType: 'catch',
+    fixed: [
+      { type: 'berry', x: 400, y: 300 },
+      { type: 'switch', x: 450, y: 560 },
+      { type: 'ball_marble', x: 450, y: 480 },  // lands on the plate, stays
+      { type: 'bowl', x: 650, y: 640 },
+    ],
+  }, [{ type: 'conveyor', x: 450, y: 380, dir: 'right', on: false }], { maxSeconds: 10, collectEvents: true });
+  check('a pressure plate wakes the stopped belt: berry carried into the bowl',
+    wired.won && wired.events.some(e => e.type === 'belt_on'), `t=${wired.seconds}s`);
+
+  const humming = Core.simulate({
+    goalType: 'catch',
+    fixed: [{ type: 'berry', x: 200, y: 640 }, { type: 'bowl', x: 900, y: 640 }],
+  }, [{ type: 'conveyor', x: 450, y: 380 }], { maxSeconds: 2, collectEvents: true });
+  check('a default belt hums from the first frame (belt_on event)',
+    humming.events.some(e => e.type === 'belt_on'));
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

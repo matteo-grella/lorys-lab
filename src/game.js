@@ -103,12 +103,29 @@
     ['balloon_goal', 4], ['spikes', 2], ['sparkle', 3],
   ];
 
+  // The three endings a custom puzzle can have. Requirements are the same
+  // teaching invariants the parts already obey: bowls only count berries,
+  // baskets only count basketballs, any good bump rings a bell.
+  // DECLARATION ORDER IS THE PRIORITY: the ending is chosen automatically
+  // from what's in the scene — bowl+berry beats bell beats basket.
+  const PUZZLE_GOALS = {
+    catch: { icon: '🍓', label: 'Feed Lory', text: 'Feed Lory the berry!', needs: ['berry', 'bowl'] },
+    bell: { icon: '🔔', label: 'Ring the bell', text: 'Ring the bell!', needs: ['bell'] },
+    basket: { icon: '🏀', label: 'Score a basket', text: 'Score a basket!', needs: ['basket', 'ball_basket'] },
+  };
+  // which endings the current scene has the parts for (priority order)
+  function puzzleViableGoals(placements) {
+    return Object.keys(PUZZLE_GOALS).filter(g =>
+      PUZZLE_GOALS[g].needs.every(t => placements.some(p => p.type === t)));
+  }
+
   function currentLevel() {
     if (S.puzzle) {
       const counts = {};
       for (const p of S.puzzle.plucked) counts[p.type] = (counts[p.type] || 0) + 1;
+      const goal = PUZZLE_GOALS[S.puzzle.goal] ? S.puzzle.goal : 'catch';
       return {
-        title: S.puzzle.name, goalType: 'catch', goalText: 'Feed Lory the berry!',
+        title: S.puzzle.name, goalType: goal, goalText: PUZZLE_GOALS[goal].text,
         // the author's own placement of the plucked parts IS the solution, so
         // hints work exactly like campaign levels (💡, modes, auto-hint)
         fixed: S.puzzle.fixed, sparkles: [], solution: S.puzzle.plucked,
@@ -116,7 +133,7 @@
         tray: Object.entries(counts).map(([type, count]) => ({ type, count })),
       };
     }
-    if (S.sandbox) return { title: 'Sandbox', goalType: 'catch', goalText: 'Build anything! With a berry and my bowl, "🧩 Make puzzle" saves it as your own puzzle.', fixed: [], sparkles: [], tray: [], solution: [], hintText: 'Try a bowl and a berry — I love catching berries!' };
+    if (S.sandbox) return { title: 'Sandbox', goalType: 'catch', goalText: 'Build anything! Give it an ending — berry + bowl, a bell, or a hoop + basketball — and "🧩 Make puzzle" saves it as your own puzzle.', fixed: [], sparkles: [], tray: [], solution: [], hintText: 'Try a bowl and a berry — I love catching berries!' };
     return LEVELS[S.levelIndex];
   }
 
@@ -403,7 +420,8 @@
       save.myPuzzles.forEach(p => {
         const card = el('button', 'card mine');
         const solved = save.puzzleWins[p.id] ? '⭐ solved!' : '&nbsp;';
-        card.innerHTML = `<div class="num">🧩</div><div class="nm">${p.name.replace(/</g, '&lt;')}</div><div class="stars">${solved}</div><span class="pedit" title="Edit">✎</span><span class="pdel" title="Delete">✕</span><span class="pshare" title="Share">📤</span>`;
+        const goalIcon = (PUZZLE_GOALS[p.goal] || PUZZLE_GOALS.catch).icon; // the ending, at a glance
+        card.innerHTML = `<div class="num">🧩</div><div class="nm">${goalIcon} ${p.name.replace(/</g, '&lt;')}</div><div class="stars">${solved}</div><span class="pedit" title="Edit">✎</span><span class="pdel" title="Delete">✕</span><span class="pshare" title="Share">📤</span>`;
         card.onclick = () => { A.sfx('levelpop'); enterLevel(0, false, p); };
         card.querySelector('.pedit').onclick = (e) => {
           e.stopPropagation();
@@ -435,11 +453,13 @@
     const last = !custom && S.levelIndex === LEVELS.length - 1;
     const starsRow = custom ? '<div class="winstars"><span class="wstar earn" style="animation-delay:0.3s">🧩</span></div>'
       : `<div class="winstars">${[0, 1, 2].map(i => `<span class="wstar ${i < stars ? 'earn' : ''}" style="animation-delay:${0.3 + i * 0.15}s">★</span>`).join('')}</div>`;
+    const customWin = { catch: 'You fed Lory!', bell: 'You rang the bell!', basket: 'Swish! What a shot!' }[
+      S.puzzle && PUZZLE_GOALS[S.puzzle.goal] ? S.puzzle.goal : 'catch'];
     root.innerHTML = `
       <div class="dim-bg"></div>
       <div class="wincard">
         <canvas id="winLory" width="200" height="200"></canvas>
-        <h2>${custom ? 'You fed Lory!' : ['Yay! You did it!', 'Berry good!', 'What a machine!'][Math.floor(Math.random() * 3)]}</h2>
+        <h2>${custom ? customWin : ['Yay! You did it!', 'Berry good!', 'What a machine!'][Math.floor(Math.random() * 3)]}</h2>
         ${starsRow}
         <div class="row">
           <button class="big blue" id="replayBtn">↺&ensp;Again</button>
@@ -565,7 +585,7 @@
     fan: 'It blows a steady wind! Light things fly away — but never my berry. Tap ⏸ to place it stopped: then only a pressure plate wakes it.',
     magnet: 'Bump it awake and it pulls metal marbles. Only marbles!',
     domino: 'Line up dominoes and tip the first one — click, clack, click!',
-    conveyor: 'A moving belt! It carries things along — flip it with ⇄.',
+    conveyor: 'A moving belt! It carries things along — flip it with ⇄. Tap ⏸ to start it stopped: then only a pressure plate runs it.',
     bumper: 'Boing-boing! Everything bounces off it, super hard.',
     balloon: 'It floats up, up, up! Pointy and hot things pop it.',
     bucket: 'It catches things and keeps them. No way out!',
@@ -609,7 +629,7 @@
       p.lit = p.lit === false;      // cold -> lit, lit (default) -> cold
       rebuildSim();
       A.sfx(p.lit === false ? 'extinguishHiss' : 'igniteFizz');
-    } else if (p.type === 'fan') {
+    } else if (p.type === 'fan' || p.type === 'conveyor') {
       p.on = p.on === false;        // stopped -> running, running (default) -> stopped
       rebuildSim();
       A.sfx(p.on === false ? 'switchOff' : 'switchOn');
@@ -637,13 +657,9 @@
     if (!S.pluckMode) {
       // validate up front so nobody plucks parts only to be refused at the end
       if (!S.placements.length) { toast('Build something first!'); return; }
-      if (!S.placements.some(p => p.type === 'berry')) {
-        setLory('think', 'Every puzzle needs a berry for me to eat! Add one from the tray first.', 6);
-        toast('Add a 🍓 berry first!'); return;
-      }
-      if (!S.placements.some(p => p.type === 'bowl')) {
-        setLory('think', 'Where will the berry land? Add my bowl from the tray first!', 6);
-        toast('Add my bowl first!'); return;
+      if (!puzzleViableGoals(S.placements).length) {
+        setLory('think', 'Every puzzle needs an ending! Give me a berry and my bowl — or a bell to ring, or a hoop and a basketball.', 8);
+        toast('Add an ending: 🍓+my bowl, a 🔔, or a 🏀 hoop + ball!'); return;
       }
       cancelDrag();
       S.pluckMode = true;
@@ -671,12 +687,17 @@
       toast('Tap at least one part to put it in the tray!');
       return;
     }
-    const all = S.placements;
-    if (!all.some(p => p.type === 'berry')) { toast('Every puzzle needs a berry to feed Lory!'); return; }
-    if (!all.some(p => p.type === 'bowl')) { toast("Every puzzle needs Lory's bowl!"); return; }
+    const viable = puzzleViableGoals(S.placements);
+    if (!viable.length) {
+      toast('Add an ending: 🍓+my bowl, a 🔔, or a 🏀 hoop + ball!');
+      return;
+    }
 
     const editing = S.editingPuzzleId && save.myPuzzles.find(q => q.id === S.editingPuzzleId);
     const defaultName = editing ? editing.name : `My Puzzle ${save.puzzleSeq}`;
+    // the ending is AUTOMATIC, by priority of what's in the scene:
+    // bowl+berry beats bell beats basket (PUZZLE_GOALS order)
+    const goal = viable[0];
     const root = $('.overlay-root');
     root.style.pointerEvents = 'auto';
     root.innerHTML = `
@@ -684,6 +705,8 @@
       <div class="wincard namecard">
         <h2>${editing ? 'Update your puzzle!' : 'Name your puzzle!'}</h2>
         <input id="pzName" maxlength="24" value="${defaultName.replace(/"/g, '&quot;')}">
+        <p style="text-align:center;font-weight:800;margin:4px 0 12px">
+          Ending: ${PUZZLE_GOALS[goal].icon} ${PUZZLE_GOALS[goal].label}</p>
         <div class="row">
           <button class="big blue" id="pzCancel">✕&ensp;Back</button>
           <button class="big leaf" id="pzSave">💾&ensp;Save</button>
@@ -705,10 +728,13 @@
         editing.name = name;
         editing.fixed = fixed.map(strip);
         editing.plucked = plucked.map(strip);
+        if (goal === 'catch') delete editing.goal; else editing.goal = goal;
         delete save.puzzleWins[editing.id]; // the puzzle changed: solve it again!
       } else {
         const id = 'pz' + Date.now();
-        save.myPuzzles.push({ id, name, fixed: fixed.map(strip), plucked: plucked.map(strip) });
+        const rec = { id, name, fixed: fixed.map(strip), plucked: plucked.map(strip) };
+        if (goal !== 'catch') rec.goal = goal;
+        save.myPuzzles.push(rec);
         save.puzzleSeq++;
         S.editingPuzzleId = id; // further saves in this session update it
       }
@@ -739,6 +765,7 @@
       have.add(canon);
       const rec = { id: puzzleId(), name: pz.name, fixed: pz.fixed, plucked: pz.plucked };
       if (pz.by) rec.by = pz.by;
+      if (pz.goal) rec.goal = pz.goal;
       save.myPuzzles.push(rec);
       added++;
     }
@@ -752,7 +779,7 @@
     // made it may no longer win — kids deserve a heads-up, not a rejection
     setTimeout(() => {
       try {
-        const r = Core.simulate({ goalType: 'catch', fixed: pz.fixed }, pz.plucked, { maxSeconds: 30 });
+        const r = Core.simulate({ goalType: pz.goal || 'catch', fixed: pz.fixed }, pz.plucked, { maxSeconds: 30 });
         if (!r.won) setLory('think', `Hmm, "${pz.name}" plays differently in this version of the game — it might need a little fix!`, 8);
       } catch (e) { /* advice must never break an import */ }
     }, 50);
@@ -932,11 +959,11 @@
   function startLoops() {
     for (const p of S.sim.parts) {
       const m = p.bodies[0].plugin.lab;
-      // the fan hum is event-driven (fan_on/fan_off, like hydrant water);
-      // here we only catch up fans ALREADY running — needed when sfx is
-      // re-enabled mid-run, after their fan_on already fired
+      // fan and belt hums are event-driven (fan_on/off, belt_on/off);
+      // here we only catch up machines ALREADY running — needed when sfx
+      // is re-enabled mid-run, after their on-events already fired
       if (p.spec.type === 'fan' && m.fanWas) A.startLoop('fan');
-      if (p.spec.type === 'conveyor') A.startLoop('conveyor');
+      if (p.spec.type === 'conveyor' && m.beltWas) A.startLoop('conveyor');
     }
   }
 
