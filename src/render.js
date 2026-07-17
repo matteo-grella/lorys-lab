@@ -32,7 +32,7 @@
   const JUICE_SPIN = 1.45;        // pattern spin exaggeration while juicy
   const JUICE_MIN_SPEED = 1.0;    // px/frame before trails/dust appear (slow
                                   // shelf rolls run at ~1.5 — keep them in)
-  const BALL_TYPES = { berry: 1, ball_beach: 1, ball_marble: 1 };
+  const BALL_TYPES = { berry: 1, ball_beach: 1, ball_marble: 1, ball_basket: 1 };
   const FIST_ANIM_T = 40; // cooldown frames above this = punch extension anim
 
   // ---------------------------------------------------------------------------
@@ -166,17 +166,28 @@
     c.beginPath(); c.arc(w * 0.28, 0, 6, -0.5, 2.2); c.stroke();
   }
 
-  // the laser/lens beam: layered red glow with a sizzling impact burst,
-  // drawn in the emitter's local frame along -y from its muzzle line
-  function drawBeam(c, muzzleY, beamLen, t) {
-    const y1 = muzzleY - 2, y2 = muzzleY - beamLen;
+  // the laser/lens beam: layered red glow along the WORLD-SPACE beam path
+  // (mirrors bend it into a polyline), glints at each bounce, sizzling
+  // impact burst at the far end
+  function drawBeamPath(c, path, t) {
+    c.save();
+    c.lineCap = 'round'; c.lineJoin = 'round';
     for (const [col, wdt] of [['rgba(232,86,63,0.25)', 11], ['rgba(255,120,90,0.6)', 5.5], ['#FFF3B0', 2.2]]) {
-      c.strokeStyle = col; c.lineWidth = wdt; c.lineCap = 'round';
-      c.beginPath(); c.moveTo(0, y1); c.lineTo(0, y2); c.stroke();
+      c.strokeStyle = col; c.lineWidth = wdt;
+      c.beginPath();
+      c.moveTo(path[0].x, path[0].y);
+      for (let i = 1; i < path.length; i++) c.lineTo(path[i].x, path[i].y);
+      c.stroke();
     }
-    c.save(); c.translate(0, y2); c.rotate((t * 9) % TAU);
+    for (let i = 1; i < path.length - 1; i++) { // mirror-bounce glints
+      c.fillStyle = C.paper;
+      star4(c, path[i].x, path[i].y, 5.5 + Math.sin(t * 15 + i * 2) * 1.5, t * 5); c.fill();
+    }
+    const end = path[path.length - 1];
+    c.save(); c.translate(end.x, end.y); c.rotate((t * 9) % TAU);
     c.fillStyle = C.sunny; star4(c, 0, 0, 9 + Math.sin(t * 21) * 2, 0); c.fill();
     c.fillStyle = C.paper; circle(c, 0, 0, 3); c.fill();
+    c.restore();
     c.restore();
   }
 
@@ -807,9 +818,8 @@
       const lz = body ? body.plugin.lab.laz : { firing: 0, beamLen: 0 };
       const t = o ? o.t : 0;
       const firing = lz.firing > 0 && lz.beamLen > 0;
-      const my = -d.h / 2; // muzzle line
-      // beam first so the cannon sits crisply on top of its root
-      if (firing) drawBeam(c, my, lz.beamLen, t);
+      const my = -d.h / 2; // muzzle line (the beam itself is drawn in the
+      // world-space beam pass — it can bend through mirrors now)
       // tail knob: tells the eye which end is the back
       c.fillStyle = C.poppy; circle(c, 0, 25, 7); c.fill();
       c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, 0, 25, 7); c.stroke();
@@ -892,7 +902,7 @@
         c.strokeStyle = g0; c.lineWidth = 10; c.lineCap = 'round';
         c.beginPath(); c.moveTo(0, 0); c.lineTo(lx, ly); c.stroke();
       }
-      if (firing) drawBeam(c, -d.h / 2, lz.beamLen, t);
+      void firing; // beam drawn in the world-space pass; glow state below
       // mount
       c.fillStyle = C.woodMid; rr(c, -d.w / 2, d.h / 2 - 7, d.w, 7, 3); c.fill();
       c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -d.w / 2, d.h / 2 - 7, d.w, 7, 3); c.stroke();
@@ -1022,6 +1032,139 @@
         }
       }
       c.restore();
+    },
+
+    mirror(c, d) {
+      const w = d.w, h = d.h;
+      // wooden back (the absorbing side)
+      c.fillStyle = C.woodMid; rr(c, -w / 2, -2, w, h / 2 + 4, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -w / 2, -2, w, h / 2 + 4, 4); c.stroke();
+      // glass face on the local-up side (the shiny reflector)
+      const g = c.createLinearGradient(0, -h / 2, 0, 2);
+      g.addColorStop(0, '#E8F6FD'); g.addColorStop(0.6, C.sky); g.addColorStop(1, '#5FA8CC');
+      c.fillStyle = g; rr(c, -w / 2 + 1, -h / 2, w - 2, h / 2 + 3, 3); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; rr(c, -w / 2 + 1, -h / 2, w - 2, h / 2 + 3, 3); c.stroke();
+      // glints
+      c.strokeStyle = 'rgba(255,249,238,0.85)'; c.lineWidth = 2; c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(-w / 4 - 6, 0); c.lineTo(-w / 4 + 6, -h / 2 + 2);
+      c.moveTo(w / 6 - 5, 0); c.lineTo(w / 6 + 5, -h / 2 + 2);
+      c.stroke();
+      // frame caps
+      c.fillStyle = C.sunny; circle(c, -w / 2 + 3, 1, 3.5); c.fill(); circle(c, w / 2 - 3, 1, 3.5); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.2;
+      circle(c, -w / 2 + 3, 1, 3.5); c.stroke(); circle(c, w / 2 - 3, 1, 3.5); c.stroke();
+    },
+
+    drawbridge(c, d) {
+      const w = d.w, h = d.h;
+      c.save();
+      if (d.dir === 'left') c.scale(-1, 1); // the free tip is the mirrored end
+      woodBlock(c, w, h, 5);
+      // cross straps
+      c.strokeStyle = 'rgba(143,98,56,0.5)'; c.lineWidth = 3;
+      for (const sx of [-w * 0.32, 0, w * 0.32]) {
+        c.beginPath(); c.moveTo(sx, -h / 2 + 2); c.lineTo(sx, h / 2 - 2); c.stroke();
+      }
+      // iron edge + chain ring at the free tip
+      c.fillStyle = C.inkSoft; rr(c, w / 2 - 6, -h / 2, 6, h, 2); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.2; rr(c, w / 2 - 6, -h / 2, 6, h, 2); c.stroke();
+      c.strokeStyle = C.woodDark; c.lineWidth = 2.5;
+      circle(c, w / 2 - 10, -h / 2 - 5, 4.5); c.stroke();
+      c.restore();
+    },
+
+    bridgeBase(c) { // hinge mount, drawn separately at the anchor (not rotated)
+      c.fillStyle = C.woodDark;
+      c.beginPath();
+      c.moveTo(0, -4); c.lineTo(13, 22); c.quadraticCurveTo(15, 26, 10, 26);
+      c.lineTo(-10, 26); c.quadraticCurveTo(-15, 26, -13, 22); c.closePath(); c.fill();
+      c.fillStyle = C.sunny; circle(c, 0, 0, 6); c.fill();
+      c.strokeStyle = C.ink; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(-3, 0); c.lineTo(3, 0); c.moveTo(0, -3); c.lineTo(0, 3); c.stroke();
+    },
+
+    pullcord(c, d, a, o, body) {
+      const cm = body ? body.plugin.lab.cord : { pulled: false, yank: 0 };
+      const t = o ? o.t : 0;
+      // anchor plate, rope-family look
+      c.fillStyle = C.woodMid; rr(c, -d.w / 2, -d.h / 2, d.w, d.h, 5); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, -d.w / 2, -d.h / 2, d.w, d.h, 5); c.stroke();
+      c.fillStyle = C.inkSoft; circle(c, -d.w / 4, 0, 1.8); c.fill(); circle(c, d.w / 4, 0, 1.8); c.fill();
+      // cord down to the ring; a yank stretches it, pulled leaves it low &
+      // slack. Tray icons get a compact cord so the well can hold it.
+      const yank = cm.yank > 0 ? Math.sin(cm.yank * 0.8) * 8 : 0;
+      const drop = (d.icon ? 42 : 95) + (cm.pulled ? 10 : 0) + yank;
+      const sway = cm.pulled ? 0 : Math.sin(t * 1.7 + (d.seed || 0)) * 3;
+      for (const [col, lw] of [[C.woodDark, 4], [C.tangerine, 1.6]]) {
+        c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(0, d.h / 2);
+        c.quadraticCurveTo(sway, d.h / 2 + drop * 0.55, sway, drop - 13); c.stroke();
+      }
+      // the pull ring (grayed once spent)
+      c.strokeStyle = cm.pulled ? C.inkSoft : C.tangerine; c.lineWidth = 5;
+      circle(c, sway, drop - 3, 9); c.stroke();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5;
+      circle(c, sway, drop - 3, 11.5); c.stroke(); circle(c, sway, drop - 3, 6.5); c.stroke();
+    },
+
+    basket(c, d, a, o, body) {
+      const w = d.w, h = d.h;
+      c.save();
+      if (d.dir === 'left') c.scale(-1, 1);
+      const rimY = -14;             // matches the physics rim line
+      const boardX = w / 2 - 5;
+      // mount bracket behind the board
+      c.fillStyle = C.woodMid; rr(c, boardX - 2, rimY - 32, 12, 22, 3); c.fill();
+      // backboard with target box
+      c.fillStyle = C.paper; rr(c, boardX - 5, -h / 2 + 2, 10, 84, 4); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 2; rr(c, boardX - 5, -h / 2 + 2, 10, 84, 4); c.stroke();
+      c.strokeStyle = C.poppy; c.lineWidth = 2.5;
+      rr(c, boardX - 3, rimY - 26, 6, 22, 2); c.stroke();
+      // net, swaying after a swish
+      const sw2 = a && a.netT != null ? Math.sin(a.netT * 12) * 6 * Math.exp(-a.netT * 2.5) : 0;
+      const rimL = -(w / 2 - 6), rimR = w / 2 - 12;
+      const netB = rimY + 34;
+      c.strokeStyle = 'rgba(255,249,238,0.95)'; c.lineWidth = 1.8;
+      for (let i = 0; i <= 4; i++) {
+        const u = i / 4;
+        c.beginPath();
+        c.moveTo(rimL + (rimR - rimL) * u, rimY + 2);
+        c.lineTo(rimL + 9 + (rimR - rimL - 18) * u + sw2, netB);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(rimR - (rimR - rimL) * u, rimY + 2);
+        c.lineTo(rimR - 9 - (rimR - rimL - 18) * u + sw2, netB);
+        c.stroke();
+      }
+      c.strokeStyle = 'rgba(255,249,238,0.8)'; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(rimL + 8 + sw2 * 0.7, netB); c.lineTo(rimR - 8 + sw2 * 0.7, netB); c.stroke();
+      // rim tube + support strut + front nub
+      c.strokeStyle = C.tangerine; c.lineWidth = 6; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(rimL, rimY); c.lineTo(boardX - 4, rimY); c.stroke();
+      c.strokeStyle = '#C96A22'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(boardX - 4, rimY + 12); c.lineTo(rimL + 28, rimY + 4); c.stroke();
+      c.fillStyle = C.poppy; circle(c, rimL, rimY, 5); c.fill();
+      c.strokeStyle = C.outline; c.lineWidth = 1.5; circle(c, rimL, rimY, 5); c.stroke();
+      c.restore();
+    },
+
+    ball_basket(c, d, a, o, body) {
+      const r = d.r, rot = body ? body.angle : 0;
+      c.rotate(-rot); // seams roll at juiced speed; glint stays screen-aligned
+      const spin = juicy ? rot * JUICE_SPIN : rot;
+      c.fillStyle = C.tangerine; circle(c, 0, 0, r); c.fill();
+      c.save(); circle(c, 0, 0, r); c.clip(); c.rotate(spin);
+      c.strokeStyle = 'rgba(67,52,43,0.65)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(0, -r); c.lineTo(0, r); c.stroke();
+      c.beginPath(); c.moveTo(-r, 0); c.lineTo(r, 0); c.stroke();
+      c.beginPath(); c.arc(-r * 1.35, 0, r * 1.05, -0.9, 0.9); c.stroke();
+      c.beginPath(); c.arc(r * 1.35, 0, r * 1.05, Math.PI - 0.9, Math.PI + 0.9); c.stroke();
+      c.restore();
+      c.strokeStyle = C.outline; c.lineWidth = 2; circle(c, 0, 0, r); c.stroke();
+      c.fillStyle = 'rgba(255,249,238,0.75)';
+      c.beginPath(); c.ellipse(-r * 0.35, -r * 0.4, 6, 3.5, -0.6, 0, TAU); c.fill();
+      c.rotate(rot);
     },
   };
 
@@ -1286,6 +1429,13 @@
           for (let i = 0; i < 6; i++) spawn({ kind: 'flamep', x: e.x, y: e.y, vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4 - 1, life: 0.4, t: 0, r: 3.5 });
           break;
         case 'cannon_dud': fx.poof(e.x, e.y, 5); break;
+        case 'cord_pull': fx.ring(e.x, e.y, C.tangerine); fx.stars(e.x, e.y, 4); break;
+        // bridge_down: the swinging plank IS the visual (the creak is the sound)
+        case 'bridge_landed': fx.poof(e.x, e.y, 6); break;
+        case 'basket':
+          fx.ring(e.x, e.y, C.sunny); fx.stars(e.x, e.y - 6, 8); fx.confetti(e.x, e.y - 10, 26);
+          swishNet(e, sim);
+          break;
         case 'win': shakeT = 0; break;
       }
     }
@@ -1306,6 +1456,16 @@
         const b = p.bodies[0];
         if (Math.abs(b.position.x - e.x) < 5) { const a = partAnim(b.plugin.lab.id); a.swingT = 0; }
       }
+    }
+  }
+
+  function swishNet(e, sim) {
+    if (!sim) return;
+    for (const p of sim.parts) {
+      if (p.spec.type !== 'basket') continue;
+      const b = p.bodies[0];
+      if (Math.hypot(b.position.x - e.x, b.position.y - e.y) < 90)
+        partAnim(b.plugin.lab.id).netT = 0;
     }
   }
 
@@ -1395,6 +1555,10 @@
         a.magnetLerp = clamp(a.magnetLerp + (m.active ? dt * 5 : -dt * 3), 0, 1);
       }
       if (type === 'scissors' && a.snipT > 0) a.snipT = Math.max(0, a.snipT - dt);
+      if (type === 'basket' && a.netT != null) {
+        a.netT += dt;
+        if (a.netT > 1.6) a.netT = null;
+      }
     }
     for (const [id, s] of squash) { s.t += dt; if (s.t > 0.18) squash.delete(id); }
   }
@@ -1411,6 +1575,10 @@
     // seesaw base behind the plank, at the constraint anchor
     if (type === 'seesaw') {
       c.save(); c.translate(spec.x, spec.y); painters.seesawBase(c); c.restore();
+    }
+    // drawbridge hinge mount behind the plank, at the anchor point
+    if (type === 'drawbridge') {
+      c.save(); c.translate(spec.x, spec.y); painters.bridgeBase(c); c.restore();
     }
     // rope line: braided cord from the anchor hook to the hanging body
     if (type === 'rope' && m.rope && m.rope.attached && !m.rope.cut) {
@@ -1451,10 +1619,13 @@
 
     c.save();
     // compound bodies (bucket/bowl): body.position is the mass centroid, which
-    // sits above the drawn geometry — align art to the physical bounds center
+    // sits above the drawn geometry — align art to the physical bounds center.
+    // The basket (also compound, never moves) is drawn from its spec anchor.
     if (type === 'bucket' || type === 'bowl') {
       c.translate((body.bounds.min.x + body.bounds.max.x) / 2,
         (body.bounds.min.y + body.bounds.max.y) / 2);
+    } else if (type === 'basket') {
+      c.translate(spec.x, spec.y);
     } else {
       c.translate(body.position.x, body.position.y);
     }
@@ -1528,6 +1699,37 @@
     }
   }
 
+  // braided rope from each pullcord's anchor to its drawbridge's free tip —
+  // taut while armed, slack once pulled / bridge down
+  function drawPullRopes(c, sim) {
+    const byId = {};
+    for (const p of sim.parts) byId[p.bodies[0].plugin.lab.id] = p;
+    for (const p of sim.parts) {
+      if (p.spec.type !== 'pullcord') continue;
+      const m = p.bodies[0].plugin.lab, cm = m.cord;
+      if (!cm.target || !byId[cm.target]) continue;
+      const bb = byId[cm.target].bodies[0], bm = bb.plugin.lab;
+      const s = bm.dir === 'left' ? -1 : 1;
+      const tip = {
+        x: bb.position.x + Math.cos(bb.angle) * s * bm.w / 2,
+        y: bb.position.y + Math.sin(bb.angle) * s * bm.w / 2,
+      };
+      const a = p.bodies[0].position;
+      const slack = cm.pulled || bm.bridge.down;
+      const sag = slack ? 48 : 12;
+      c.save();
+      for (const [col, lw] of [[C.woodDark, 3.5], [C.tangerine, 1.4]]) {
+        c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
+        c.globalAlpha = slack ? 0.6 : 1;
+        c.beginPath();
+        c.moveTo(a.x, a.y + 6);
+        c.quadraticCurveTo((a.x + tip.x) / 2, Math.max(a.y, tip.y) + sag, tip.x, tip.y - 4);
+        c.stroke();
+      }
+      c.restore();
+    }
+  }
+
   // ambient machine FX: water droplets along hydrant jets, flame flickers
   let ambT = 0;
   function stepMachineFx(sim, dt, running) {
@@ -1597,6 +1799,12 @@
     c.translate(spec.x, spec.y);
     // cannon angle = barrel elevation, not body rotation — never tilt it
     if (spec.type !== 'cannon') c.rotate((spec.angle || 0) * Math.PI / 180);
+    // drawbridge ghosts preview the RAISED pose above the hinge anchor
+    if (spec.type === 'drawbridge') {
+      const bw = spec.w || window.LoryCore.PART_DEFS.drawbridge.w;
+      c.translate(0, -bw / 2);
+      c.rotate((spec.dir === 'left' ? 1 : -1) * Math.PI / 2);
+    }
     if (opts.style === 'hint') {
       const pulse = 0.5 + 0.4 * Math.abs(Math.sin(o.t * TAU / 1.2 / 2));
       c.globalAlpha = pulse;
@@ -1640,6 +1848,7 @@
     c.translate(sel.x, sel.y);
     c.save();
     if (sel.type !== 'cannon') c.rotate((sel.angle || 0) * Math.PI / 180); // cannon angle = elevation
+    if (sel.type === 'drawbridge') { c.translate(0, -w / 2); c.rotate(Math.PI / 2); } // halo hugs the raised plank
     c.strokeStyle = C.loryBlue; c.lineWidth = 3; c.setLineDash([6, 5]);
     c.lineDashOffset = -(o.t * 16 % 11);
     rr(c, -w / 2 - 8, -h / 2 - 8, w + 16, h + 16, 12); c.stroke();
@@ -1648,6 +1857,7 @@
     const btns = [];
     // above the part normally; below it when that would collide with the topbar
     let topY = sel.y - Math.max(w, h) / 2 - 44 * B;
+    if (sel.type === 'drawbridge') topY = sel.y - w - 44 * B; // above the raised tip
     if (topY < 92 * B) topY = sel.y + Math.max(w, h) / 2 + 44 * B;
     const defsBtns = [];
     if (defs.rot) defsBtns.push({ id: 'rotl', icon: '⟲', col: C.loryBlue }, { id: 'rotr', icon: '⟳', col: C.loryBlue });
@@ -1686,7 +1896,7 @@
   }
 
   // tray. boost enlarges wells on small screens. When the full set would
-  // squeeze wells below a comfortable width (the 32-well sandbox!), the tray
+  // squeeze wells below a comfortable width (the 37-well sandbox!), the tray
   // paginates: big ‹ › buttons flip between pages of comfortable wells.
   function drawTray(c, tray, o, dragType, boost, pageIn) {
     const B = boost || 1;
@@ -1751,7 +1961,7 @@
       c.translate(cx, cy);
       c.scale(sc, sc);
       if (item.count === 0) c.globalAlpha = 0.22;
-      const d = { type: item.type, w: defs.w, h: defs.h, r: defs.r, dir: item.dir || (defs.dir && defs.dir[0]) };
+      const d = { type: item.type, w: defs.w, h: defs.h, r: defs.r, dir: item.dir || (defs.dir && defs.dir[0]), icon: true };
       (painters[item.type] || painters.plank)(c, d, null, o, null);
       c.restore();
       // count badge
@@ -1844,6 +2054,7 @@
 
     drawWindZones(ctx, sim, o, !running);
     drawWires(ctx, sim, o);
+    drawPullRopes(ctx, sim);
     stepMachineFx(sim, dt, running);
     drawTrails(ctx, sim);
 
@@ -1855,6 +2066,16 @@
       return ka - kb;
     });
     for (const p of list) drawPart(ctx, p, o, sim);
+
+    // laser/lens beams ride ABOVE the machines (they can bend through
+    // mirrors now — the world-space path comes from core's castBeam)
+    for (const p of list) {
+      const ty = p.spec.type;
+      if (ty !== 'laser' && ty !== 'lens') continue;
+      const mm = p.bodies[0].plugin.lab;
+      const bz = ty === 'laser' ? mm.laz : mm.lens;
+      if (bz.firing > 0 && bz.beamPath && bz.beamPath.length > 1) drawBeamPath(ctx, bz.beamPath, o.t);
+    }
 
     // hint ghosts
     if (hints) for (const h of hints) drawGhost(ctx, h, o, { style: 'hint' });

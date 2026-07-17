@@ -58,8 +58,10 @@ pickups, two age modes, and a secret unlock cheat. The sandbox additionally
 carries the "machine shop": ropes, triggered scissors, candles (placeable lit
 or cold), strike-anywhere matches, fuses, bump-activated hydrants, pressure
 switches, a rotatable spring fist, a rotatable laser cannon, a
-button-toggled lightbulb whose light a lens focuses into that same beam, and
-a fuse-fired one-shot toy cannon that swallows a dropped ball and launches it —
+button-toggled lightbulb whose light a lens focuses into that same beam, a
+fuse-fired one-shot toy cannon that swallows a dropped ball and launches it,
+beam-bouncing mirrors, a pullcord-operated drawbridge, and a basketball
+hoop with its own `basket` win signal —
 fire, water, light, cutting, and remote triggering as composable systems.
 
 **Everything in-game is code-generated**: all art is Canvas 2D paths, all
@@ -100,7 +102,7 @@ lorys-lab/
 │                            path — the filename rotates when the artifact URL
 │                            has to be re-minted; check build.mjs for current)
 ├── test/
-│   ├── smoke.mjs            78 physics behaviour proofs (run in Node)
+│   ├── smoke.mjs            93 physics behaviour proofs (run in Node)
 │   ├── verify.mjs           per-level solvability proofs (run in Node)
 │   ├── puzzlecode.mjs       puzzle wire-format roundtrip + hostile-input proofs
 │   └── audio-shape.mjs      audio API-surface test with stubbed browser globals
@@ -140,7 +142,7 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 |---|---|---|
 | core | game | `createSim(levelDef, placements)` → sim object; `sim.step()` → events array; `sim.state` flags; `PART_DEFS`; `placementOverlaps(sim, spec)`; `simulate(levelDef, placements, opts)` (headless); `puzzleCode.{encode,decode,canonical}` (puzzle sharing, async) |
 | core | render | each Matter body carries `body.plugin.lab` metadata (`type,id,w,h,r,dir,spec,...`); event objects for FX |
-| core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off, laser, bulb_on/off, fan_on/off, cannon_load, cannon_fire, cannon_dud` |
+| core | audio (via game) | event objects: `hit, boing, bumper, pop, bell, sparkle, magnet_on/off, win, snip, snipclick, ignite, extinguish, switch_on/off, thwack, water_on/off, laser, bulb_on/off, fan_on/off, cannon_load, cannon_fire, cannon_dud, cord_pull, bridge_down, bridge_landed, basket` |
 | render | game | `R.draw(frame)` returns `{selButtons, wells, bubbleClose}` hit-regions the input code uses next frame |
 | levels | game/tests | array of level objects (schema in §5) |
 
@@ -229,6 +231,11 @@ matter.min.js  →  core.js  →  levels.js  →  audio.js  →  render.js  → 
 | `bulb` | 44×58 | ✓ | ✓ (sandbox) | – | right/left/up | lightbulb with a REAL button on the `dir` face: each press (relSpeed ≥ 1, `BULB_BUTTON_COOLDOWN 20` absorbs contact rattle) toggles the light; a wired switch drives it instead. The glow itself is harmless — a lens weaponizes it. Events `bulb_on/bulb_off` |
 | `lens` | 46×26 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360°: while a LIT bulb sits within `LENS_REACH 220` with a clear line of sight (solids block light; sensors/balloons don't), it fires the same beam as the laser along local −y (shared `castBeam`); `lab.fedBy` tells the renderer where the light ray comes from |
 | `cannon` | 92×62 | ✓ | ✓ (sandbox) | ✓ (angle = barrel ELEVATION 0–75°, clamped; the body never rotates) | right/left | the first part with BOTH orientation extras (tuple `[type,x,y,angle,dir]`, no third flag possible). Loading: any dynamic circle that isn't buoyant/poppable (beach ball, marble, berry — not a roped one) whose center enters the hatch zone (local x −38..+2, up to 36px above the top face) while not rising (`vy ≥ −0.5`) is swallowed via `Composite.remove` (kept in `lab.cannon.ball`, marked `lab.swallowed` — the renderer hides it); the door shuts = loaded & ready. Firing: any flame within `FLAME_R×1.3` or a beam within 20px of the breech fuse tip (top of the back face, 8px out) lights it → `CANNON_FUSE_FRAMES 80` sizzle → ball re-added at the muzzle (pivot local (10,−10), barrel 46) with `CANNON_LAUNCH 17` along the barrel. **ONE SHOT EACH**: burnout (shot OR dud) sets `lab.cannon.dead` — the fuse never relights, the lid stays down for good (the empty dud slams its own lid), and nothing more is swallowed, so a parked candle cannot make an infinite auto-cannon and a dead cannon cannot eat the berry. Water dousing a LIT fuse does not spend it (the cord never burned down — still at most one shot). `CANNON_COOLDOWN_FRAMES 60` is only the renderer's smoke-wisp window. Deliberately NOT: switch-wired, a flame point itself (its spark lights nothing), a wind/water/magnet target (static). A lit fuse suppresses quiescence |
+| `mirror` | 68×14 | ✓ | ✓ (sandbox) | ✓ | – | rotatable 360°: the glass FACE (local −y side) reflects laser/lens beams specularly in `castBeam` — the beam becomes a polyline (`lab.laz/lens.beamPath`, world coords, drawn in render's beam pass ABOVE parts) with up to `MIRROR_MAX_BOUNCES 4` extra legs, each with fresh `LASER_REACH` ("mirrors give the beam new legs"); every leg applies full `beamSegmentEffects` (pop/ignite/cut/light-cannon). The wooden back absorbs (`d·n ≥ 0`). Solid body; otherwise inert |
+| `drawbridge` | 150×16 | ✓ | ✓ (sandbox) | – | right/left | spec anchor = the HINGE; starts RAISED (vertical wall, body angle ∓90°). A wired pullcord's yank sets `bridge.lowering`; the static body is moved kinematically around the hinge (smoothstep, `BRIDGE_LOWER_FRAMES 55`) and lands `BRIDGE_DIP 4°` PAST flat so slow rollers drain off the tip instead of stalling mid-deck (Matter's rolling resistance is real). Plank-sibling friction 0.4. One-way: down stays down. Lowering suppresses quiescence. Events `bridge_down` (start) / `bridge_landed` (tip thud). Editor: ghost/halo special-cased to the raised pose |
+| `pullcord` | 28×18 | ✓ | ✓ (sandbox) | – | – | anchor plate; cord + ring dangle `PULLCORD_DROP 95` below. Ropes itself to the nearest drawbridge within `PULLCORD_WIRE_REACH 380` at sim start (render draws the braided rope to the bridge tip — taut, then slack). Trigger: any dynamic body with `vy > 1` whose center comes within `PULLCORD_RING_R 24 + its radius` of the ring = ONE yank (event `cord_pull`), lowering the wired bridge. One-shot & spent (ring grays out); unwired cords yank harmlessly |
+| `basket` | 96×120 | ✓ | ✓ (sandbox) | – | right/left | hoop: compound solid (backboard on the `dir` side + two rim nubs — balls genuinely rattle on the rim) + a net SENSOR below the rim. Scores BASKETBALLS ONLY (teaching invariant, like bowls/berries): `ball_basket` overlapping the sensor with `vy > 1` = swish (event `basket`, per-basket `BASKET_SWISH_COOLDOWN 40`), latches `state.basketScored` → goalType `'basket'` wins. Drawn from its spec anchor (compound centroid ≠ anchor) |
+| `ball_basket` | r 22 | ✓ | ✓ (sandbox) | – | – | the basketball: density 0.0011, restitution 0.62 — bouncy, blowable, cannon-loadable (it's a roller). The only thing baskets count |
 | `shelf` | w×24 (default 200) | ✓ | fixed-only | ✓ | – | `sizable` (levels set w/h/angle) |
 | `wall` | 24×200 | ✓ | fixed-only | – | – | `sizable` |
 | `berry` | r 16 | dynamic | fixed-only* | – | – | THE goal ball; `isBerry` flag |
@@ -312,7 +319,8 @@ Executed **before** each `Engine.update`:
   flame-point collection (candles + matches + fuse fronts) → flame effects
   (pop/ignite/relight/strike-match/burn-rope) → scissors-rope intersection →
   laser beam → bulb tick → lens feed (both share `castBeam`) → fist cooldown →
-  cannon (hatch capture + fuse burn + fire). New events: `snip {cause:'blade'|'fire'}`,
+  cannon (hatch capture + fuse burn + fire) → pullcord ring check →
+  drawbridge kinematics → basket swish cooldown. New events: `snip {cause:'blade'|'fire'}`,
   `ignite`, `extinguish`, `switch_on/off`, `thwack`, `water_on/off`, `laser`, `bulb_on/off`,
   `cannon_load/fire/dud`. A burning
   fuse, a flaring match, a spraying hydrant, a firing laser/lens or a lit
@@ -415,6 +423,10 @@ The game forwards them to `LoryAudio.handleEvents()` and
 | `cannon_load` | x, y, partId | a roller dropped into the hatch; door shuts | audio (wood clap + latch), render (sunny ring + poof); door/lid pose read from `lab.cannon.loaded/doorAnim` |
 | `cannon_fire` | x, y, bodyId, partId | fuse burned down on a loaded cannon; ball launched from the muzzle, cannon spent (`lab.cannon.dead`) | audio (BOOM + half-depth music duck), render (big poof/ring/stars + flame flecks); recoil + muzzle flash read `lab.cannon.fireAnim` |
 | `cannon_dud` | x, y, partId | fuse burned down on an EMPTY cannon — also spends it | audio (sad pfff), render (poof); the ignite/extinguish events are reused for its fuse |
+| `cord_pull` | x, y | something fell onto a pullcord's ring (the one yank) | audio (rope zip), render (tangerine ring + stars); cord/ring pose read from `lab.cord` |
+| `bridge_down` | x, y | a drawbridge starts lowering | audio (wooden creak); render: deliberately none — the swinging plank is the visual |
+| `bridge_landed` | x, y (tip) | the drawbridge finished lowering | audio (wood thud, reuses the wood voice), render (dust poof at the tip) |
+| `basket` | x, y | a basketball swished through a hoop (scores `state.basketScored`) | audio (net whoosh + chime), render (ring + stars + mini confetti + net sway anim) |
 
 If you add an event type, update **both** consumers or nothing will happen —
 they ignore unknown types silently.
@@ -491,7 +503,7 @@ level number − 1. Schema:
 ```jsonc
 {
   "title": "Roll to the Bowl",          // short, playful
-  "goalType": "catch",                  // catch | bell | pop
+  "goalType": "catch",                  // catch | bell | pop | basket
   "goalText": "Help the berry roll all the way into Lory's bowl!", // child-readable, shown in Lory's bubble on entry
   "teaches": "plank: a tilted plank makes a ball roll downhill",   // design note (not shown to players)
   "fixed": [                            // pre-placed furniture (locked)
@@ -564,7 +576,7 @@ new total) before you build.
 Run everything from the project root:
 
 ```bash
-node test/smoke.mjs      # 78 physics behaviour proofs — every part & interaction
+node test/smoke.mjs      # 93 physics behaviour proofs — every part & interaction
 node test/verify.mjs     # per-level proofs; add a number to test one: node test/verify.mjs 17
 node test/puzzlecode.mjs # puzzle wire-format roundtrip + hostile-input proofs
 node test/audio-shape.mjs  # audio API surface with stubbed window/AudioContext
@@ -887,7 +899,7 @@ silently. All shapes are defaulted on load — never assume fields exist.
   `puzzleWins`, `puzzleSeq` but **keeps settings** (mode/sfx/music/juice).
   The title screen carries only a music toggle (`#tMusic`, labeled) next to
   Start fresh; sound effects toggle only in the in-game topbar (`#sfxBtn`).
-- **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (32 entries incl. the machine shop and
+- **Sandbox**: `S.sandbox`; tray from `SANDBOX_TRAY` (37 entries incl. the machine shop and
   fixed-only parts); no "try again" stuck flow, but the run auto-stops back
   to edit after ~1.5 s of stillness (§4.4); win events celebrate (confetti +
   reset of `won/caughtFrames/bellRung`) but never end the run.

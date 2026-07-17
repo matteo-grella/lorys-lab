@@ -46,6 +46,10 @@ A.handleEvents([
   { type: 'cannon_load' },
   { type: 'cannon_fire' },
   { type: 'cannon_dud' },
+  { type: 'cord_pull' },
+  { type: 'bridge_down' },
+  { type: 'bridge_landed' },
+  { type: 'basket' },
   { type: 'unknown_event' },
   null,
 ]);

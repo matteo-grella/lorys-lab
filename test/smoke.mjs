@@ -928,6 +928,120 @@ function run(level, placements, seconds = 12, watch = null) {
     `ignite=${n2('ignite')} dud=${n2('cannon_dud')} settled=${dud.state.settled}`);
 }
 
+// 43. Mirror: the shiny face bounces the beam (specular), the wooden back
+//     absorbs it, two mirrors chain, and reflected legs carry the full
+//     beam powers (here: lighting a cold candle two bounces away).
+{
+  const mk = (extra) => ({
+    goalType: 'pop',
+    fixed: [
+      { type: 'laser', x: 100, y: 636, angle: 90 },   // fires right
+      { type: 'ball_marble', x: 100, y: 560 },        // falls on it -> PEW
+      ...extra,
+    ],
+  });
+  const r1 = Core.simulate(mk([
+    { type: 'mirror', x: 500, y: 636, angle: -45 },
+    { type: 'balloon_goal', x: 500, y: 400 },         // around the corner, straight up
+  ]), [], { maxSeconds: 5, collectEvents: true });
+  check('mirror bounces the beam 90° up — balloon around the corner pops', r1.won);
+  const r2 = Core.simulate(mk([
+    { type: 'mirror', x: 500, y: 636, angle: 135 },   // wooden back to the beam
+    { type: 'balloon_goal', x: 500, y: 400 },
+  ]), [], { maxSeconds: 5, collectEvents: true });
+  check('the wooden back absorbs the beam — balloon survives', !r2.won);
+  const r3 = Core.simulate(mk([
+    { type: 'mirror', x: 500, y: 636, angle: -45 },
+    { type: 'mirror', x: 500, y: 300, angle: 135 },
+    { type: 'balloon_goal', x: 800, y: 300 },
+  ]), [], { maxSeconds: 5, collectEvents: true });
+  check('two mirrors chain: up then right, pops the far balloon', r3.won);
+  const r4 = Core.simulate({
+    goalType: 'bell',
+    fixed: [
+      { type: 'laser', x: 100, y: 636, angle: 90 },
+      { type: 'ball_marble', x: 100, y: 560 },
+      { type: 'mirror', x: 500, y: 636, angle: -45 },
+      { type: 'mirror', x: 500, y: 300, angle: 135 },
+      { type: 'candle', x: 800, y: 345, lit: false }, // wick sits on the 2nd reflected leg
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, [], { maxSeconds: 4, collectEvents: true });
+  check('a twice-reflected beam still lights a cold candle',
+    r4.events.some(e => e.type === 'ignite'));
+}
+
+// 44. Drawbridge + pullcord: a weight dropped on the ring yanks the cord
+//     once, the wired bridge creaks down and becomes a road; unpulled it
+//     stays a wall. One-shot; an unwired cord still clicks but moves nothing.
+{
+  const level = {
+    goalType: 'catch',
+    fixed: [
+      { type: 'shelf', x: 330, y: 500, w: 340, h: 24, angle: 10 },
+      { type: 'berry', x: 200, y: 445 },
+      { type: 'drawbridge', x: 505, y: 525 },
+      { type: 'pullcord', x: 300, y: 250 },
+      { type: 'ball_marble', x: 300, y: 300 },        // falls onto the ring
+      { type: 'bowl', x: 672, y: 640 },               // under the lowered tip
+    ],
+  };
+  const r = Core.simulate(level, [], { maxSeconds: 20, collectEvents: true });
+  const seq = r.events.filter(e => ['cord_pull', 'bridge_down', 'bridge_landed'].includes(e.type)).map(e => e.type);
+  check('marble yanks the ring, bridge lowers, berry crosses into the bowl',
+    r.won && seq.join(',') === 'cord_pull,bridge_down,bridge_landed', `t=${r.seconds}s [${seq}]`);
+  const ctrl = Core.simulate({ ...level, fixed: level.fixed.filter(s => s.type !== 'ball_marble') },
+    [], { maxSeconds: 14, collectEvents: true });
+  check('unpulled bridge stays a wall — the berry waits, nothing wins',
+    !ctrl.won && !ctrl.events.some(e => e.type === 'bridge_down'));
+  const twice = Core.simulate({
+    ...level,
+    fixed: level.fixed.concat([{ type: 'ball_marble', x: 300, y: -1600 }]), // a later drop
+  }, [], { maxSeconds: 20, collectEvents: true });
+  check('the cord is one-shot: a second weight yanks nothing',
+    twice.events.filter(e => e.type === 'cord_pull').length === 1);
+  const loose = Core.simulate({
+    goalType: 'bell',
+    fixed: [
+      { type: 'pullcord', x: 300, y: 250 },
+      { type: 'ball_marble', x: 300, y: 300 },
+      { type: 'bell', x: 1250, y: 60 },
+    ],
+  }, [], { maxSeconds: 5, collectEvents: true });
+  check('an unwired cord clicks its one yank and nothing breaks',
+    loose.events.filter(e => e.type === 'cord_pull').length === 1
+    && !loose.events.some(e => e.type === 'bridge_down'));
+}
+
+// 45. Basket: a basketball falling through the hoop is a WIN signal
+//     (goalType 'basket'); baskets only count basketballs; and the cannon
+//     can bank one in off the backboard.
+{
+  const mk = ball => ({
+    goalType: 'basket',
+    fixed: [
+      { type: 'basket', x: 600, y: 400 },
+      { type: ball, x: 592, y: 200 },
+    ],
+  });
+  const r1 = Core.simulate(mk('ball_basket'), [], { maxSeconds: 5, collectEvents: true });
+  check('basketball through the hoop: swish event + basket goal won',
+    r1.won && r1.events.some(e => e.type === 'basket'), `t=${r1.seconds}s`);
+  const r2 = Core.simulate(mk('ball_marble'), [], { maxSeconds: 5, collectEvents: true });
+  check('baskets only count basketballs: a marble scores nothing',
+    !r2.won && !r2.events.some(e => e.type === 'basket'));
+  const r3 = Core.simulate({
+    goalType: 'basket',
+    fixed: [
+      { type: 'cannon', x: 200, y: 659, angle: 60 },
+      { type: 'ball_basket', x: 182, y: 560 },        // loads the cannon
+      { type: 'candle', x: 146, y: 661 },             // lights the fuse
+      { type: 'basket', x: 770, y: 320 },
+    ],
+  }, [], { maxSeconds: 8, collectEvents: true });
+  check('cannon three-pointer: lobbed basketball banks in — win', r3.won, `t=${r3.seconds}s`);
+}
+
 const fails = results.filter(r => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 process.exit(fails.length ? 1 : 0);

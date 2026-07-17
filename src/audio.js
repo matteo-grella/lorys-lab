@@ -326,6 +326,32 @@
       var b = tone(t, 'triangle', 220, 0.12, 0.1, 0.005, rnd(-30, 30));
       b.o.frequency.exponentialRampToValueAtTime(140, t + 0.12);
       shot(b.o, t + 0.15, b.nodes.concat(n));
+    },
+    cordZip: function (t) { // pull-ring yanked: rope zip + snap
+      var r = rnd(0.92, 1.08);
+      var n = noiseHit(t, 0.09, 'bandpass', 2600 * r, 3, 0.22);
+      var b = tone(t + 0.05, 'sine', 700 * r, 0.05, 0.2, 0.001);
+      b.o.frequency.exponentialRampToValueAtTime(320 * r, t + 0.1);
+      shot(b.o, t + 0.12, b.nodes.concat(n));
+    },
+    creak: function (t) { // drawbridge lowering: slow wooden groan
+      var r = rnd(0.94, 1.06);
+      var o = osc('sawtooth', 130 * r, t), lp = filt('lowpass', 420, 1.2), g = gainNode(0);
+      o.frequency.exponentialRampToValueAtTime(70 * r, t + 0.75);
+      holdEnv(g.gain, t, 0.05, 0.16, t + 0.6, 0.25);
+      var wob = lfoTo(t, 'sine', 7, 12, o.frequency, t + 0.85); // groany wobble
+      chain(o, lp, g, sfxBus); o.start(t);
+      shot(o, t + 0.88, [o, lp, g].concat(wob));
+    },
+    swish: function (t) { // basket! net whoosh + happy two-note chime
+      var r = rnd(0.95, 1.05);
+      var n = noise(false), bp = filt('bandpass', 3200 * r, 1.6), g = gainNode(0);
+      sweep(bp.frequency, t, 3200 * r, t + 0.22, 900 * r, true);
+      env(g.gain, t, 0.01, 0.3, 0.22);
+      chain(n, bp, g, sfxBus); n.start(t); n.stop(t + 0.26);
+      var c1 = tone(t + 0.1, 'sine', 1046.5, 0.25, 0.16, 0.002, rnd(-8, 8)); c1.o.stop(t + 0.37);
+      var c2 = tone(t + 0.2, 'sine', 1568, 0.3, 0.16, 0.002, rnd(-8, 8));
+      shot(c2.o, t + 0.52, [n, bp, g].concat(c1.nodes, c2.nodes));
     }
   };
 
@@ -611,6 +637,10 @@
         case 'cannon_load': sfx('cannonLoad'); break;
         case 'cannon_fire': sfx('cannonBoom'); break;
         case 'cannon_dud': sfx('cannonDud'); break;
+        case 'cord_pull': sfx('cordZip'); break;
+        case 'bridge_down': sfx('creak'); break;
+        case 'bridge_landed': sfx('wood', { strength: 1 }); break; // landing thud reuses the wood voice
+        case 'basket': sfx('swish'); break;
         case 'water_on': startLoop('water'); break;
         case 'water_off': stopLoop('water'); break;
         case 'fan_on': startLoop('fan'); break;

@@ -97,7 +97,8 @@
   const SANDBOX_TRAY = [
     ['plank', 8], ['shelf', 4], ['wall', 2], ['trampoline', 3], ['seesaw', 2], ['fan', 3],
     ['magnet', 2], ['domino', 12], ['conveyor', 3], ['bumper', 3], ['balloon', 4], ['bucket', 2],
-    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2], ['bulb', 2], ['lens', 2], ['cannon', 2],
+    ['rope', 3], ['scissors', 2], ['candle', 3], ['match', 3], ['fuse', 5], ['hydrant', 2], ['switch', 2], ['fist', 2], ['laser', 2], ['bulb', 2], ['lens', 2], ['cannon', 2], ['mirror', 3],
+    ['drawbridge', 2], ['pullcord', 2], ['basket', 1], ['ball_basket', 3],
     ['ball_beach', 3], ['ball_marble', 3], ['berry', 3], ['bowl', 1], ['bell', 1],
     ['balloon_goal', 4], ['spikes', 2], ['sparkle', 3],
   ];
@@ -580,6 +581,11 @@
     bulb: 'Press its button to switch the light on and off — ⇄ moves the button. Shine it into a lens!',
     lens: 'It focuses light! Put it near a glowing bulb and out comes a laser beam.',
     cannon: 'Drop a ball in the top hatch — the door snaps shut! Light the back fuse with any flame and BOOM — one shot each, so make it count! ⟲⟳ aims the barrel, ⇄ turns it around.',
+    mirror: 'The shiny side bounces the laser beam somewhere new! Turn it to aim — the wooden back just blocks.',
+    drawbridge: 'A castle bridge! It starts up like a wall — pull its cord and down it creaks into a road.',
+    pullcord: 'A ring on a rope! Drop something onto the ring and it yanks the nearest drawbridge down.',
+    basket: 'Swish! Get my basketball through the hoop from above — only basketballs count! ⇄ turns it around.',
+    ball_basket: 'My bouncy basketball! Shoot it through the hoop — even out of a cannon!',
     ball_beach: 'A light, bouncy beach ball — the wind loves it.',
     ball_marble: 'A heavy metal marble. Magnets love it!',
     berry: 'My berry! Roll it into my bowl to feed me!',

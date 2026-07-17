@@ -54,7 +54,7 @@ least TWO existing systems. The systems are:
 | magnetism | magnet ↔ `ball_marble` only | `lab` flag, never type-name checks |
 | fire | candle/match flames, fuse fronts | join the `flames` array or be flammable (checked against flame points) |
 | water | hydrant jet | douse/push blocks in the hydrant region loop |
-| light beam | laser, lens (via bulb) | `castBeam` affects you, or you emit/block/feed beams |
+| light beam | laser, lens (via bulb), mirror | `castBeam` affects you, or you emit/block/bounce/feed beams |
 | cutting | scissors, flame, beam | have a string (rope/tether pattern) or cut strings |
 | triggering | bump, touch, face-button, switch wire, plate | pick from the trigger vocabulary (§1.3) |
 | scoring | sparkles, goals | sensors + `state` counters |
@@ -73,10 +73,12 @@ lists go in the part's guide table row.
   `createSim` if it makes sense
 - **flame proximity** (`FLAME_R`-ish, forgiving): candle/match ignition
 - **beam crossing** (`distPointSeg < 20`): candle/match/fuse via `castBeam`
+- **drop-zone** (center inside a zone + a falling-velocity gate): cannon
+  hatch, pullcord ring — per-frame check in `applyBehaviours`, no sensor body
 - **always-on with optional initial state** (`spec.on !== false`): fan
 
 ### 1.4 State vocabulary
-- one-shot & spent (match, cannon) · timed burst (hydrant, magnet, laser)
+- one-shot & spent (match, cannon, pullcord) · timed burst (hydrant, magnet, laser)
 - toggle (bulb) · powered-while (all switch loads)
 - **author-settable initial state**: candle `lit`, fan `on`. ⚠️ Each such
   boolean consumes one wire-format "extra" slot and parts have AT MOST TWO,

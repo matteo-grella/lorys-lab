@@ -28,12 +28,16 @@ const GOOD = {
     { type: 'candle', x: 500, y: 661, lit: false },   // cold candle
     { type: 'fan', x: 200, y: 470, dir: 'up' },       // non-default dir
     { type: 'hydrant', x: 700, y: 659 },              // default dir (omitted on wire)
+    { type: 'drawbridge', x: 750, y: 520, dir: 'left' },
   ],
   plucked: [
     { type: 'plank', x: 400, y: 500, angle: 15 },     // rotated part
     { type: 'laser', x: 800, y: 500, angle: 90 },
     { type: 'fan', x: 250, y: 470, dir: 'left', on: false }, // TWO extras: dir + off
     { type: 'cannon', x: 600, y: 500, angle: 60, dir: 'left' }, // TWO extras: dir + elevation
+    { type: 'mirror', x: 450, y: 300, angle: 30 },
+    { type: 'basket', x: 640, y: 300, dir: 'left' },
+    { type: 'ball_basket', x: 500, y: 300 },
   ],
 };
 
@@ -44,13 +48,18 @@ const GOOD = {
   check('code is URL-safe', /^LORY\d+\.[A-Za-z0-9\-_]+$/.test(code), `${code.length} chars`);
   const back = await PC.decode(code);
   check('name/by survive', back.name === GOOD.name && back.by === 'L.');
-  check('part counts survive', back.fixed.length === 6 && back.plucked.length === 4);
+  check('part counts survive', back.fixed.length === 7 && back.plucked.length === 7);
   const offFan = back.plucked.find(s => s.type === 'fan');
   check('two extras survive (stopped fan keeps dir AND on:false)',
     offFan.dir === 'left' && offFan.on === false);
   const cannon = back.plucked.find(s => s.type === 'cannon');
   check('two extras survive (cannon keeps dir AND elevation angle)',
     cannon.dir === 'left' && cannon.angle === 60);
+  const mirror = back.plucked.find(s => s.type === 'mirror');
+  const basket = back.plucked.find(s => s.type === 'basket');
+  const bridge = back.fixed.find(s => s.type === 'drawbridge');
+  check('new-part extras survive (mirror angle, basket dir, drawbridge dir)',
+    mirror.angle === 30 && basket.dir === 'left' && bridge.dir === 'left');
   const cold = back.fixed.find(s => s.type === 'candle');
   const fan = back.fixed.find(s => s.type === 'fan');
   const hyd = back.fixed.find(s => s.type === 'hydrant');

@@ -28,9 +28,12 @@ self-contained file.
   machine shop: ropes (cuttable), scissors, candles, fuses that burn with a
   real flame front, directional fire hydrants (water pushes what wind can't,
   and douses flames), pressure switches that power fans/belts/magnets through
-  a visible wire, a spring-loaded boxing fist, and a fuse-fired cannon —
+  a visible wire, a spring-loaded boxing fist, a fuse-fired cannon —
   drop a ball in the top hatch (the door snaps shut), light the fuse with
-  any flame or beam, BOOM — one shot each. Every behavior and
+  any flame or beam, BOOM — one shot each, mirrors that bounce the laser
+  beam around corners, a castle drawbridge lowered by dropping a weight on
+  its pull-ring, and a basketball hoop with its own win signal (only
+  basketballs count — try a cannon three-pointer). Every behavior and
   interaction is proven by the headless physics suite.
 - **Puzzle maker**: build a scene in the sandbox, press 🧩, tap the parts the
   player should place (they fade into the future tray), press 💾 and name it.

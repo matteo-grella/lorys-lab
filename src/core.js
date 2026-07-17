@@ -45,6 +45,11 @@
     // BARREL ELEVATION 0–75° — the body itself never rotates, so the loading
     // hatch on top keeps working at every aim
     cannon:      { w: 92,  h: 62,  static: true,  placeable: true, rot: true, dir: ['right', 'left'] },
+    mirror:      { w: 68,  h: 14,  static: true,  placeable: true, rot: true },
+    drawbridge:  { w: 150, h: 16,  static: true,  placeable: true, dir: ['right', 'left'] }, // anchor = hinge
+    pullcord:    { w: 28,  h: 18,  static: true,  placeable: true },  // anchor plate; ring dangles below
+    basket:      { w: 96,  h: 120, static: true,  placeable: true, dir: ['right', 'left'] }, // backboard side
+    ball_basket: { r: 22,          static: false, placeable: true },
     balloon:     { r: 24,          static: false, placeable: true },
     bucket:      { w: 120, h: 90,  static: true,  placeable: true },
     ball_beach:  { r: 28,          static: false, placeable: true },
@@ -69,6 +74,7 @@
     rope: 'wood', scissors: 'magnet', candle: 'wood', fuse: 'wood',
     hydrant: 'magnet', switch: 'wood', fist: 'bumper', match: 'wood', laser: 'magnet',
     bulb: 'magnet', lens: 'magnet', cannon: 'magnet',
+    mirror: 'magnet', drawbridge: 'wood', pullcord: 'wood', basket: 'magnet', ball_basket: 'rubber',
   };
 
   const FAN_REACH = 280;
@@ -100,6 +106,14 @@
   const CANNON_COOLDOWN_FRAMES = 60;// re-arm time before the fuse can be lit again
   const CANNON_MOUTH_HW = 20;       // half-width of the loading-hatch capture zone
   const CANNON_ELEV_MAX = 75;       // barrel elevation clamp (editor + hostile codes)
+  const MIRROR_MAX_BOUNCES = 4;     // beam legs after the first — enough for ping-pong tricks
+  const BRIDGE_LOWER_FRAMES = 55;   // the drawbridge creaks down in ~0.9s
+  const BRIDGE_DIP = 4 * Math.PI / 180; // lands 4° PAST flat, draining toward the tip —
+                                    // slow rollers cross instead of stalling mid-deck
+  const PULLCORD_DROP = 95;         // anchor to the dangling ring's center
+  const PULLCORD_RING_R = 24;       // forgiving grab zone around the ring
+  const PULLCORD_WIRE_REACH = 380;  // links to the nearest drawbridge (bridges span far gaps)
+  const BASKET_SWISH_COOLDOWN = 40; // one swish per pass-through
 
   let nextId = 1;
 
@@ -296,6 +310,58 @@
           { cannon: { loaded: false, ball: null, fuseLit: false, fuseT: 0, cooldown: 0, dead: false, doorAnim: 0, fireAnim: 0 } }));
         break;
 
+      case 'mirror':
+        // Rotatable 360°: the SHINY face (local "up") reflects laser/lens
+        // beams specularly (see castBeam); the wooden back just blocks them.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, angle, friction: 0.2, restitution: 0.3 })));
+        break;
+
+      case 'drawbridge': {
+        // Hinged at the placement point, starts RAISED (a vertical wall).
+        // A wired pullcord lowers it once — smoothstep swing around the
+        // hinge over BRIDGE_LOWER_FRAMES — then it is a floor toward
+        // spec.dir forever. The body is static but moved per-frame while
+        // lowering (see applyBehaviours).
+        const s = spec.dir === 'left' ? -1 : 1;
+        bodies.push(tag(Bodies.rectangle(x, y - w / 2, w, h, {
+          isStatic: true, angle: -s * Math.PI / 2, friction: 0.4, restitution: 0.05, // plank-sibling friction: berries must roll across
+        }), { bridge: { t: 0, lowering: false, down: false, hinge: { x, y } } }));
+        break;
+      }
+
+      case 'pullcord':
+        // Anchor plate with a cord + ring dangling PULLCORD_DROP below.
+        // Anything falling onto the ring gives ONE yank, which lowers the
+        // nearest drawbridge (wired at sim start). One-shot & spent.
+        bodies.push(tag(Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.4, restitution: 0.1 }),
+          { cord: { pulled: false, target: null, yank: 0 } }));
+        break;
+
+      case 'basket': {
+        // Basketball hoop: solid backboard on the spec.dir side + two rim
+        // nubs (balls really bounce off the rim); a net sensor below the
+        // rim scores BASKETBALLS ONLY, falling through from above.
+        const s = spec.dir === 'left' ? -1 : 1;
+        const rimY = y - 14;
+        const board = Bodies.rectangle(x + s * (w / 2 - 5), y - 8, 10, 84);
+        const nubA = Bodies.circle(x - s * (w / 2 - 6), rimY, 4.5);
+        const nubB = Bodies.circle(x + s * (w / 2 - 12), rimY, 4.5);
+        const compound = Body.create({ parts: [board, nubA, nubB], isStatic: true, friction: 0.2, restitution: 0.35 });
+        tag(compound, {});
+        bodies.push(compound);
+        const sensor = Bodies.rectangle(x - s * 2, rimY + 26, 52, 30, { isStatic: true, isSensor: true });
+        tag(sensor, { sensor: 'basket', swishCd: 0 });
+        sensor.label = 'basket_sensor';
+        bodies.push(sensor);
+        break;
+      }
+
+      case 'ball_basket':
+        bodies.push(tag(Bodies.circle(x, y, def.r, {
+          density: 0.0011, restitution: 0.62, friction: 0.05, frictionAir: 0.004,
+        })));
+        break;
+
       case 'domino':
         // friction 0.2 is load-bearing: chains propagate at ~34px spacing
         // (higher friction stalls the chain, lower slides instead of tipping).
@@ -400,7 +466,7 @@
     const state = {
       t: 0, frames: 0, won: false, settled: false,
       goalType: levelDef.goalType || 'catch',
-      caughtFrames: 0, bellRung: false,
+      caughtFrames: 0, bellRung: false, basketScored: false,
       balloonsLeft: 0, sparkles: 0, sparkleTotal: 0,
       events: [],   // drained by renderer/audio every frame
       quietFrames: 0,
@@ -477,6 +543,18 @@
         lab(swBody).sw.target = lab(best.bodies[0]).id;
         lab(best.bodies[0]).switchControlled = true;
       }
+    }
+    // Pullcords rope themselves to the nearest drawbridge.
+    for (const p of parts) {
+      if (p.spec.type !== 'pullcord') continue;
+      const cb = p.bodies[0];
+      let best = null, bd = PULLCORD_WIRE_REACH;
+      for (const q of parts) {
+        if (q.spec.type !== 'drawbridge') continue;
+        const d = Math.hypot(q.spec.x - cb.position.x, q.spec.y - cb.position.y);
+        if (d < bd) { bd = d; best = q; }
+      }
+      if (best) lab(cb).cord.target = lab(best.bodies[0]).id;
     }
 
     // --- collision handling -------------------------------------------------
@@ -670,13 +748,22 @@
       }
     });
 
-    // Bowl catch detection via active sensor overlap.
+    // Bowl catch detection via active sensor overlap. The basket net scores
+    // the same way — but only BASKETBALLS, only falling through (a swish is
+    // transient, so one downward overlap counts; the cooldown stops a single
+    // pass from scoring twice).
     Events.on(engine, 'collisionActive', (ev) => {
       for (const pair of ev.pairs) {
         for (const [s, o] of [[pair.bodyA, pair.bodyB], [pair.bodyB, pair.bodyA]]) {
           const ls = lab(s);
           if (ls && ls.sensor === 'bowl' && lab(o) && lab(o).isBerry) {
             state.caughtFrames++;
+          }
+          if (ls && ls.sensor === 'basket' && lab(o) && lab(o).type === 'ball_basket'
+            && o.velocity.y > 1 && ls.swishCd <= 0) {
+            ls.swishCd = BASKET_SWISH_COOLDOWN;
+            state.basketScored = true;
+            state.events.push({ type: 'basket', x: s.position.x, y: s.position.y - 10 });
           }
         }
       }
@@ -1065,56 +1152,38 @@
         }
       }
 
-      // The beam engine, shared by the laser cannon and the lens: march from
-      // the emitter's muzzle along local "up" to the first solid body; on the
-      // way pop balloons, light candles/matches/fuses, burn ropes and tether
-      // strings. Sensors and balloons never block the beam.
-      function castBeam(cb, m, bz) {
-        const nx = Math.sin(cb.angle), ny = -Math.cos(cb.angle);
-        const mz = { x: cb.position.x + nx * (m.h / 2 + 4), y: cb.position.y + ny * (m.h / 2 + 4) };
-        let len = LASER_REACH;
-        // whatever is pressed right against the emitter — often the very body
-        // that triggered the shot — must not eat the beam: shoot straight
-        // through anything overlapping the first sample point
-        const pointBlank = Query.point(all, { x: mz.x + nx * 6, y: mz.y + ny * 6 });
-        outer:
-        for (let s = 6; s <= LASER_REACH; s += 6) {
-          const pt = { x: mz.x + nx * s, y: mz.y + ny * s };
-          for (const b of Query.point(all, pt)) {
-            if (b.isSensor || pointBlank.includes(b)) continue;
-            const mb = lab(b);
-            if (mb && (mb.id === m.id || mb.poppable)) continue;
-            len = s; break outer;
-          }
-        }
-        bz.beamLen = len; // renderer draws the beam from this
-        const end = { x: mz.x + nx * len, y: mz.y + ny * len };
-        for (const b of all) {
-          const mb = lab(b);
+      // What one beam segment does to the world: pop balloons, light
+      // candles/matches/cannon fuses, ignite fuse cords at the crossing
+      // point, burn ropes and tether strings. Shared by every beam leg.
+      function beamSegmentEffects(a, b) {
+        const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+        const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+        for (const bb of all) {
+          const mb = lab(bb);
           if (mb && mb.poppable && !mb.popped
-            && distPointSeg(b.position, mz, end) < (mb.r || 20) + 4) popBalloon(b);
+            && distPointSeg(bb.position, a, b) < (mb.r || 20) + 4) popBalloon(bb);
         }
         for (const q of parts) {
           if (q.spec.type === 'candle') {
             const cm = lab(q.bodies[0]).candle;
             const tip = flameTip(q.bodies[0], lab(q.bodies[0]).h);
-            if (!cm.lit && distPointSeg(tip, mz, end) < 20) {
+            if (!cm.lit && distPointSeg(tip, a, b) < 20) {
               cm.lit = true;
               state.events.push({ type: 'ignite', x: tip.x, y: tip.y });
             }
           } else if (q.spec.type === 'match') {
             const mm = lab(q.bodies[0]).match;
             const head = matchHead(q.bodies[0], lab(q.bodies[0]).h);
-            if (!mm.lit && !mm.dead && distPointSeg(head, mz, end) < 20)
+            if (!mm.lit && !mm.dead && distPointSeg(head, a, b) < 20)
               strikeMatch(q.bodies[0]);
           } else if (q.spec.type === 'cannon') {
             const tip = cannonFuseTip(q.bodies[0]);
-            if (distPointSeg(tip, mz, end) < 20) lightCannon(q.bodies[0]);
+            if (distPointSeg(tip, a, b) < 20) lightCannon(q.bodies[0]);
           } else if (q.spec.type === 'fuse') {
             const qb = q.bodies[0], fm = lab(qb).fuse;
             if (fm.dead) continue;
             for (let s = 0; s <= len; s += 6) {
-              const l = toLocal(qb, { x: mz.x + nx * s, y: mz.y + ny * s });
+              const l = toLocal(qb, { x: a.x + ux * s, y: a.y + uy * s });
               if (Math.abs(l.y) <= lab(qb).h / 2 + 6 && Math.abs(l.x) <= fm.len / 2 + 4) {
                 igniteFuse(fm, qb, Math.max(0, Math.min(1, (l.x + fm.len / 2) / fm.len)));
                 break;
@@ -1122,14 +1191,58 @@
             }
           } else if (q.spec.type === 'rope') {
             const ends = ropeEnds(q);
-            const hit = ends && segHitSeg(mz, end, ends[0], ends[1], 8);
+            const hit = ends && segHitSeg(a, b, ends[0], ends[1], 8);
             if (hit) cutRope(q, hit.x, hit.y, 'fire');
           } else if (q.spec.type === 'balloon_goal') {
             const ends = tetherEnds(q);
-            const hit = ends && segHitSeg(mz, end, ends[0], ends[1], 8);
+            const hit = ends && segHitSeg(a, b, ends[0], ends[1], 8);
             if (hit) cutTether(q, hit.x, hit.y, 'fire');
           }
         }
+      }
+
+      // The beam engine, shared by the laser cannon and the lens: march from
+      // the emitter's muzzle along local "up" to the first solid body — and
+      // BOUNCE off mirror faces (specular reflection off the shiny front;
+      // the wooden back absorbs), up to MIRROR_MAX_BOUNCES legs with fresh
+      // LASER_REACH each ("mirrors give the beam new legs"). Every leg
+      // applies the full beamSegmentEffects. Sensors and balloons never
+      // block the beam.
+      function castBeam(cb, m, bz) {
+        let dx = Math.sin(cb.angle), dy = -Math.cos(cb.angle);
+        let px = cb.position.x + dx * (m.h / 2 + 4), py = cb.position.y + dy * (m.h / 2 + 4);
+        const path = [{ x: px, y: py }];
+        // whatever is pressed right against the emitter — often the very body
+        // that triggered the shot — must not eat the beam: shoot straight
+        // through anything overlapping the first sample point
+        const pointBlank = Query.point(all, { x: px + dx * 6, y: py + dy * 6 });
+        let skipId = m.id; // the emitter on leg 0; the just-bounced mirror after
+        for (let leg = 0; leg <= MIRROR_MAX_BOUNCES; leg++) {
+          let len = LASER_REACH, hit = null;
+          outer:
+          for (let s = 6; s <= LASER_REACH; s += 6) {
+            const pt = { x: px + dx * s, y: py + dy * s };
+            for (const b of Query.point(all, pt)) {
+              if (b.isSensor || (leg === 0 && pointBlank.includes(b))) continue;
+              const mb = lab(b);
+              if (mb && (mb.id === skipId || mb.poppable)) continue;
+              len = s; hit = b; break outer;
+            }
+          }
+          const end = { x: px + dx * len, y: py + dy * len };
+          beamSegmentEffects({ x: px, y: py }, end);
+          path.push(end);
+          if (leg === 0) bz.beamLen = len; // painters read this for the muzzle glow
+          const mb = hit && lab(hit);
+          if (!mb || mb.type !== 'mirror') break;
+          const nx = Math.sin(hit.angle), ny = -Math.cos(hit.angle); // shiny-face normal
+          const dn = dx * nx + dy * ny;
+          if (dn >= 0) break;                    // wooden back: absorbed
+          dx = dx - 2 * dn * nx; dy = dy - 2 * dn * ny;
+          px = end.x + dx * 4; py = end.y + dy * 4; // step off the glass
+          skipId = mb.id;
+        }
+        bz.beamPath = path; // renderer draws the whole polyline from this
       }
 
       // Laser cannons: touch bursts (or a wired switch) drive the beam.
@@ -1255,12 +1368,67 @@
           state.events.push({ type: 'cannon_dud', x: mz.x, y: mz.y, partId: m.id });
         }
       }
+
+      // Pullcords: anything falling onto the dangling ring gives ONE yank,
+      // which starts the wired drawbridge's descent. One-shot & spent.
+      for (const p of parts) {
+        if (p.spec.type !== 'pullcord') continue;
+        const cb = p.bodies[0], m = lab(cb), cm = m.cord;
+        if (cm.yank > 0) cm.yank--;
+        if (cm.pulled) continue;
+        const ring = { x: cb.position.x, y: cb.position.y + PULLCORD_DROP };
+        for (const b of all) {
+          if (b.isStatic || b.isSensor || b.velocity.y < 1) continue; // must FALL onto it
+          if (Math.hypot(b.position.x - ring.x, b.position.y - ring.y)
+            > PULLCORD_RING_R + (b.circleRadius || 10)) continue;
+          cm.pulled = true; cm.yank = 14;
+          state.events.push({ type: 'cord_pull', x: ring.x, y: ring.y });
+          for (const q of parts) {
+            if (q.spec.type !== 'drawbridge' || lab(q.bodies[0]).id !== cm.target) continue;
+            const bm = lab(q.bodies[0]).bridge;
+            if (!bm.down && !bm.lowering) {
+              bm.lowering = true;
+              state.events.push({ type: 'bridge_down', x: bm.hinge.x, y: bm.hinge.y });
+            }
+          }
+          break;
+        }
+      }
+
+      // Drawbridges: swing down around the hinge once triggered (static
+      // body moved kinematically; smoothstep so it lands softly).
+      for (const p of parts) {
+        if (p.spec.type !== 'drawbridge') continue;
+        const bb = p.bodies[0], m = lab(bb), bm = m.bridge;
+        if (!bm.lowering) continue;
+        bm.t = Math.min(1, bm.t + 1 / BRIDGE_LOWER_FRAMES);
+        const k = bm.t * bm.t * (3 - 2 * bm.t);
+        const phi = (1 - k) * (Math.PI / 2 + BRIDGE_DIP) - BRIDGE_DIP;
+        const s = m.dir === 'left' ? -1 : 1;
+        Body.setPosition(bb, {
+          x: bm.hinge.x + s * Math.cos(phi) * m.w / 2,
+          y: bm.hinge.y - Math.sin(phi) * m.w / 2,
+        });
+        Body.setAngle(bb, -s * phi);
+        if (bm.t >= 1) {
+          bm.lowering = false; bm.down = true;
+          state.events.push({ type: 'bridge_landed', x: bm.hinge.x + s * m.w, y: bm.hinge.y });
+        }
+      }
+
+      // Basket nets tick their swish cooldown (one score per pass-through).
+      for (const p of parts) {
+        if (p.spec.type !== 'basket') continue;
+        const sm = lab(p.bodies[1]);
+        if (sm.swishCd > 0) sm.swishCd--;
+      }
     }
 
     function checkGoal() {
       if (state.won) return;
       if (state.goalType === 'catch' && state.caughtFrames >= 18) state.won = true;
       if (state.goalType === 'bell' && state.bellRung) state.won = true;
+      if (state.goalType === 'basket' && state.basketScored) state.won = true;
       if (state.goalType === 'pop' && state.sparkleTotal >= 0 && state.balloonsLeft === 0 && countGoalBalloons() > 0) state.won = true;
       if (state.won) state.events.push({ type: 'win' });
     }
@@ -1281,6 +1449,7 @@
         if (p.spec.type === 'laser' && lab(p.bodies[0]).laz.firing > 0) return false;
         if (p.spec.type === 'lens' && lab(p.bodies[0]).lens.firing > 0) return false;
         if (p.spec.type === 'cannon' && lab(p.bodies[0]).cannon.fuseLit) return false;
+        if (p.spec.type === 'drawbridge' && lab(p.bodies[0]).bridge.lowering) return false;
       }
       let maxV = 0;
       for (const b of dynamicBodies()) {
